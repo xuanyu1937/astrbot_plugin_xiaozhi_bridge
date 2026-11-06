@@ -217,9 +217,9 @@ _GEN_FILE = "/tmp/astrbot_device_bridge_gen.txt"
 
 @register(
     "astrbot_plugin_device_bridge",
-    "彭语涵",
+    "轩宇(xuanyu)",
     "把小智 ESP32 接入 AstrBot：填 token 即用，共用人格、工具与记忆",
-    "1.6.4",
+    "1.6.5",
 )
 class DeviceBridge(Star):
     def __init__(self, context: Context, config: dict | None = None):

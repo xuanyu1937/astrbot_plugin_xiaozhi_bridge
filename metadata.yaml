@@ -7,7 +7,13 @@ help: |
   2) 打开插件配置页，填 Token 并选择发送人身份
   3) 在小智控制台的「角色介绍」里写清楚：只有出现召唤词才调用工具
   详细说明见 README。
-version: v1.6.4
-author: 彭语涵
+support_platforms:
+  - aiocqhttp
+  - weixin_oc
+  - webchat
+  - telegram
+  - wecom
+version: v1.6.5
+author: 轩宇（xuanyu）
 repo: ""
 astrbot_version: ">=4.26.1"

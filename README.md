@@ -193,6 +193,7 @@ astrbot_plugin_device_bridge/
 
 ## 十三、更新记录
 
+- **v1.6.5** 作者信息更正为「轩宇（xuanyu）」，同步 LICENSE 与元数据
 - **v1.6.4** 文档改为通用开源写法：去掉具体人名依赖，补充能力边界、接口清单、常见问题与许可
 - **v1.6.3** 修配置页 500（补齐 `_config_view` / `_save_cfg_patch`），`page/mode` 单接口返回全部数据
 - **v1.6.0** 状态灯、自检、重连、日志页、称呼、静音时段、多设备、指标、导入导出
@@ -218,3 +219,6 @@ MIT License。欢迎提 issue / PR；二次开发请保留原作者信息。
 
 - [松果 NAS 开关机](https://github.com/xuanyu1937/astrbot_plugin_songguo_power) —— 同一作者的 AstrBot 插件
 
+## 作者
+
+轩宇（GitHub: [xuanyu1937](https://github.com/xuanyu1937)）
