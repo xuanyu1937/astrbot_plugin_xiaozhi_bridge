@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+runtime.json
+state.json
+*.log
+.env

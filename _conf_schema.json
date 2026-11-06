@@ -1,0 +1,78 @@
+{
+  "xiaozhi_token": {
+    "description": "小智接入点 Token（必填）",
+    "type": "string",
+    "default": "",
+    "obvious_hint": true,
+    "hint": "小智控制台 → 智能体 → MCP 接入点，复制 token 贴这里。可只贴 token，也可贴整条 wss 地址；留空表示不改动。"
+  },
+  "unified_user_id": {
+    "description": "发送人身份（必填）",
+    "type": "string",
+    "default": "",
+    "obvious_hint": true,
+    "hint": "填的是「你是谁」，不是人格名字。微信和小智只是渠道，填同一个人，两边就归到同一个人身上。建议用配置页下拉直接选。"
+  },
+  "push_to_wechat": {
+    "description": "把对话推送到微信",
+    "type": "bool",
+    "default": true,
+    "hint": "小智那边聊完，微信收到一条带标签的消息。"
+  },
+  "require_trigger": {
+    "description": "只在被召唤时转接",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后要说召唤词才转给 AstrBot 的人格，否则小智自己回答。召唤词在下面「召唤词」里改。"
+  },
+  "trigger_words": {
+    "description": "【高级】召唤词（用逗号分隔）",
+    "type": "list",
+    "default": [
+      "小助手"
+    ],
+    "hint": "句子里出现任一个词就转给 AstrBot 里的人格。默认只是占位，必须改成你自己人格的名字，否则叫不到。"
+  },
+  "astrbot_session_id": {
+    "description": "【高级】设备会话标识",
+    "type": "string",
+    "default": "xiaozhi-wx",
+    "hint": "保持默认即可，用来维持设备侧连续记忆。"
+  },
+  "trigger_idle_minutes": {
+    "description": "【高级】多久没说话自动退出",
+    "type": "int",
+    "default": 30,
+    "hint": "召唤后一直由 AstrBot 回答，超过这个分钟数没动静自动退回小智。"
+  },
+  "push_bot_tag": {
+    "description": "【高级】推送里“对方说的话”标签",
+    "type": "string",
+    "default": "【设备】",
+    "hint": "标在设备一侧说的话前面，方便区分谁说的。"
+  },
+  "push_user_tag": {
+    "description": "【高级】推送里“我说的话”标签",
+    "type": "string",
+    "default": "【我】",
+    "hint": "标在你（人格）回复的前面。"
+  },
+  "user_alias": {
+    "description": "怎么称呼用户",
+    "type": "string",
+    "default": "哥哥",
+    "hint": "插件自己说的那几句话里用的称呼（比如「X 稍等一下」）。"
+  },
+  "quiet_hours": {
+    "description": "静音时段",
+    "type": "string",
+    "default": "",
+    "hint": "格式 23:30-07:30，支持跨零点。这段内不推送、不主动打招呼，对话照常。留空=不启用。"
+  },
+  "multi_device_enable": {
+    "description": "多设备独立记忆",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后每台设备一条独立会话，互不串话；关闭则所有设备共用一条，保持旧行为。"
+  }
+}
