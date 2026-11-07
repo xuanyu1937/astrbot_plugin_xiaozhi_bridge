@@ -174,12 +174,24 @@ async function apiPost(p, body){
   return unwrap(await b.apiPost(p, body || {}));
 }
 
+function pickStatus(d){
+  d = d || {};
+  if (d.status && d.status.text) return d.status;
+  const diag = d.diag || {};
+  if (diag.status && diag.status.text) return diag.status;
+  const items = diag.items || [];
+  const bad = items.filter(it => !it.ok);
+  if (items.length && bad.length === 0) return {level:'green', text:'已连接'};
+  if (items.length) return {level:'yellow', text:'部分检查未通过'};
+  return {level:'yellow', text:'已连接（状态未提供）'};
+}
+
 function setPill(st){
   const el = $('statusPill');
   if (!el) return;
   st = st || {};
-  el.className = 'pill ' + (st.level || 'gray');
-  el.textContent = (st.text || '未知状态') + (st.last_ok_at ? ' · ' + st.last_ok_at : '');
+  el.className = 'pill ' + (st.level || 'yellow');
+  el.textContent = (st.text || '已连接（状态未提供）') + (st.last_ok_at ? ' · ' + st.last_ok_at : '');
 }
 
 function renderCheck(diag){
@@ -260,7 +272,7 @@ async function loadAll(){
   const d = await apiGet('page/mode');
   LAST = d;
   const c = d.config || {};
-  setPill(d.status || {});
+  setPill(pickStatus(d));
   fillForm(c);
   fillUsers(d.users || [], c.unified_user_id || '');
   renderCheck(d.diag || {});
