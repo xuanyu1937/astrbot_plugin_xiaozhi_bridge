@@ -195,6 +195,12 @@ astrbot_plugin_device_bridge/
 
 - **v1.6.8** 修上一版漏改：`page/mode` 真的补上 `status`（v1.6.7 打补丁时锚点错位，实际落在 /health）
 - **v1.6.7** 修面板状态徽标：`page/mode` 接口漏返回 `status`，导致一直显示「未知状态」
+- **v1.6.11** 按插件审核意见整改：
+  日志统一走 `astrbot.api.logger`，不再写本地 `xiaozhi.log`；
+  `state.json` 迁到 `data/plugin_data/astrbot_plugin_device_bridge/`；
+  不再自动往 `api_keys` 表插 key（改为要求手动配置）；
+  关闭会话 TTS 改用官方 `astrbot.api.sp` 接口，不再直连数据库；
+  数据库访问全部改为只读
 - **v1.6.10** 状态徽标改由前端推导：接口回滚到 v1.6.6 原样，新增 `pickStatus()` 从自检结果推导「已连接 / 部分检查未通过」，不再出现「未知状态」
 - **v1.6.9** 给 `_status()` 加容错（上一版导致接口 500）
 - **v1.6.8** 再次尝试补 `status` 字段（仍不稳定）

@@ -6,6 +6,13 @@
     "obvious_hint": true,
     "hint": "小智控制台 → 智能体 → MCP 接入点，复制 token 贴这里。可只贴 token，也可贴整条 wss 地址；留空表示不改动。"
   },
+  "astrbot_api_key": {
+    "description": "AstrBot API Key（设备提问用）",
+    "type": "string",
+    "default": "",
+    "obvious_hint": true,
+    "hint": "面板 → API Keys 手动创建后粘贴进来，权限给 chat 就够。留空时设备提问不可用（会返回提示），推送与身份列表不受影响。插件不会自动创建或修改数据库里的 key。"
+  },
   "unified_user_id": {
     "description": "发送人身份（必填）",
     "type": "string",
@@ -92,5 +99,23 @@
     "type": "int",
     "default": 200,
     "hint": "合并后超过这个条数，就丢掉最早的，避免无限膨胀。"
+  },
+  "long_task_notice": {
+    "description": "长任务先回一句占位",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，模型 5 秒内没答完就先回一句「稍等一下」，避免设备端判定卡顿。"
+  },
+  "long_task_threshold_sec": {
+    "description": "占位提示触发秒数",
+    "type": "int",
+    "default": 5,
+    "hint": "超过这个秒数还没答完就先回占位句。小智端通常 6~8 秒就判定超时，建议 4~6。"
+  },
+  "long_task_remind_sec": {
+    "description": "长任务进度提醒间隔（秒）",
+    "type": "int",
+    "default": 45,
+    "hint": "任务超过这么久还没完成，会再发一句「还在弄」。"
   }
 }

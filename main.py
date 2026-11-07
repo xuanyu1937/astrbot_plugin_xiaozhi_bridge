@@ -22,6 +22,7 @@ import httpx
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import sys
 import time
@@ -51,7 +52,6 @@ except ImportError:  # pragma: no cover
     from mcp_client import XiaoZhiMCPClient, build_ws_url  # type: ignore
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_FILE = os.path.join(PLUGIN_DIR, "runtime.json")
 DEFAULT_DB = os.getenv("ASTRBOT_DB", "/AstrBot/data/data_v4.db")
 REPLY_TIMEOUT = 120
 
@@ -219,7 +219,7 @@ _GEN_FILE = "/tmp/astrbot_device_bridge_gen.txt"
     "astrbot_plugin_device_bridge",
     "轩宇(xuanyu)",
     "把小智 ESP32 接入 AstrBot：填 token 即用，共用人格、工具与记忆",
-    "v1.6.10",
+    "v1.6.13",
 )
 class DeviceBridge(Star):
     def __init__(self, context: Context, config: dict | None = None):
@@ -243,11 +243,30 @@ class DeviceBridge(Star):
         self._last_ok_at: float = 0.0
         self._last_error: str = ""
         self._extra_tools: dict = {}
-        self._setup_file_log()
 
     # ---------- 推送开关：配置默认值 + 运行时覆盖 ----------
+    def _data_dir(self) -> str:
+        """AstrBot 规定的插件数据目录：data/plugin_data/<plugin_name>/"""
+        try:
+            from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+            base = os.path.join(get_astrbot_data_path(), "plugin_data", "astrbot_plugin_device_bridge")
+        except Exception:  # noqa: BLE001
+            base = "/AstrBot/data/plugin_data/astrbot_plugin_device_bridge"
+        os.makedirs(base, exist_ok=True)
+        return base
+
     def _state_path(self) -> str:
-        return os.path.join(PLUGIN_DIR, "state.json")
+        path = os.path.join(self._data_dir(), "state.json")
+        # 旧版本写在插件目录里，第一次启动时自动搬过来
+        legacy = os.path.join(PLUGIN_DIR, "state.json")
+        if not os.path.exists(path) and os.path.exists(legacy):
+            try:
+                shutil.copy2(legacy, path)
+                logger.info("[device_bridge] 已把 state.json 迁到 %s", path)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[device_bridge] state.json 迁移失败：%s", exc)
+        return path
 
     def _load_state(self) -> dict:
         try:
@@ -342,77 +361,34 @@ class DeviceBridge(Star):
             logger.warning("[device_bridge] 写配置失败：%s", exc)
 
     # ---------- 关掉设备会话的 TTS（否则回复变音频、取不到文本）----------
-    def _disable_session_tts(self) -> None:
+    async def _disable_session_tts(self) -> None:
+        """关掉设备会话的 TTS：走 astrbot 官方 preferences 接口，不直连数据库。"""
         try:
+            from astrbot.api import sp
+
             user = self._uid()
             sid = (self.cfg.get("astrbot_session_id") or "xiaozhi-wx").strip()
             if not user:
                 return
             umo = f"webchat:FriendMessage:webchat!{user}!{sid}"
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-            con = sqlite3.connect(DEFAULT_DB, timeout=10)
-            try:
-                row = con.execute(
-                    "select id, value from preferences where scope='umo' and scope_id=? and key='session_service_config'",
-                    (umo,),
-                ).fetchone()
-                if row:
-                    val = json.loads(row[1] or "{}")
-                    inner = val.setdefault("val", {})
-                    if inner.get("tts_enabled") is False:
-                        return
-                    inner["tts_enabled"] = False
-                    con.execute(
-                        "update preferences set value=?, updated_at=? where id=?",
-                        (json.dumps(val, ensure_ascii=False), now, row[0]),
-                    )
-                else:
-                    val = {"val": {"tts_enabled": False}}
-                    con.execute(
-                        "insert into preferences (scope, scope_id, key, value, created_at, updated_at) "
-                        "values (?,?,?,?,?,?)",
-                        ("umo", umo, "session_service_config",
-                         json.dumps(val, ensure_ascii=False), now, now),
-                    )
-                con.commit()
-            finally:
-                con.close()
+
+            cur = await sp.get_async(scope="umo", scope_id=umo,
+                                     key="session_service_config", default={}) or {}
+            if isinstance(cur, str):
+                try:
+                    cur = json.loads(cur or "{}")
+                except Exception:  # noqa: BLE001
+                    cur = {}
+            inner = cur.setdefault("val", {}) if isinstance(cur, dict) else {}
+            if inner.get("tts_enabled") is False:
+                return
+            inner["tts_enabled"] = False
+            await sp.put_async(scope="umo", scope_id=umo,
+                               key="session_service_config", value=cur)
             logger.info("[device_bridge] 已关闭设备会话 TTS：%s", umo)
-            try:
-                self.context.astrbot_config_mgr._load_all_configs()
-            except Exception:  # noqa: BLE001
-                pass
         except Exception as exc:  # noqa: BLE001
             logger.warning("[device_bridge] 关闭会话 TTS 失败：%s", exc)
 
-    # ---------- 日志落盘，方便用户/我排障 ----------
-    def _setup_file_log(self) -> None:
-        try:
-            import logging
-
-            level = getattr(logging, str(self.cfg.get("log_level") or "INFO").upper(), logging.INFO)
-            # 只在父 logger 挂一次，子 logger 不再挂且不向上传播，避免每行打两遍
-            parent = logging.getLogger("xiaozhi")
-            parent.setLevel(level)
-            if not any(isinstance(h, logging.FileHandler) for h in parent.handlers):
-                fh = logging.FileHandler(os.path.join(PLUGIN_DIR, "xiaozhi.log"), encoding="utf-8")
-                fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-                parent.addHandler(fh)
-            child = logging.getLogger("xiaozhi.mcp")
-            child.setLevel(level)
-            # 清掉子 logger 上遗留的 FileHandler（改版前挂过，会跟父级重复打两遍）
-            for h in list(child.handlers):
-                if isinstance(h, logging.FileHandler):
-                    child.removeHandler(h)
-                    try:
-                        h.close()
-                    except Exception:  # noqa: BLE001
-                        pass
-            child.propagate = True
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[device_bridge] 日志落盘失败：%s", exc)
-
-    # ================= 生命周期 =================
     def _config_view(self) -> dict:
         """页面回填用的配置视图（token 只报是否已填）。"""
         cp = "/AstrBot/data/config/astrbot_plugin_device_bridge_config.json"
@@ -726,7 +702,7 @@ class DeviceBridge(Star):
             logger.info("[device_bridge] MCP 客户端已启动：%s", build_ws_url(token).split("?")[0])
 
         if self.cfg.get("disable_session_tts", True):
-            self._disable_session_tts()
+            await self._disable_session_tts()
 
         # 定期清理音频缓存
         if self._cleanup_task is None or self._cleanup_task.done():
@@ -813,63 +789,23 @@ class DeviceBridge(Star):
 
     # ================= 凭据 =================
     def _ensure_api_key(self) -> str:
-        """优先用配置；否则读取本地缓存；再否则自动生成一把 chat 权限的 key。"""
+        """只读配置，不再自动往 api_keys 表里插记录。
+
+        没配置就降级：依赖 AstrBot API 的功能（读会话列表等）会不可用，
+        但设备对话本身照常走 MCP，不受影响。
+        """
         configured = (self.cfg.get("astrbot_api_key") or "").strip()
         if configured:
             return configured
 
-        try:
-            if os.path.exists(RUNTIME_FILE):
-                cached = (json.load(open(RUNTIME_FILE, encoding="utf-8")) or {}).get("api_key")
-                if cached:
-                    return cached
-        except Exception:  # noqa: BLE001
-            pass
-
-        try:
-            raw = f"abk_{secrets.token_urlsafe(32)}"
-            hashed = hashlib.pbkdf2_hmac(
-                "sha256", raw.encode(), b"astrbot_api_key", 100_000
-            ).hex()
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            con = sqlite3.connect(DEFAULT_DB, timeout=10)
-            try:
-                cols = [c[1] for c in con.execute("PRAGMA table_info(api_keys)")]
-                if not cols:
-                    raise RuntimeError("api_keys 表不存在（AstrBot 版本过旧）")
-                row = {
-                    "created_at": now,
-                    "updated_at": now,
-                    "key_id": secrets.token_hex(8),
-                    "name": "xiaozhi-plugin",
-                    "key_hash": hashed,
-                    "key_prefix": raw[:12],
-                    "scopes": json.dumps(["chat", "chat:admin", "im"]),
-                    "created_by": "device_bridge",
-                }
-                row = {k: v for k, v in row.items() if k in cols}
-                con.execute(
-                    f"INSERT INTO api_keys ({','.join(row)}) VALUES ({','.join('?' * len(row))})",
-                    list(row.values()),
-                )
-                con.commit()
-            finally:
-                con.close()
-
-            with open(RUNTIME_FILE, "w", encoding="utf-8") as f:
-                json.dump({"api_key": raw, "created_at": now}, f, ensure_ascii=False)
-            os.chmod(RUNTIME_FILE, 0o600)
-            logger.info("[device_bridge] 已自动生成 AstrBot API Key（保存在插件目录 runtime.json）")
-            return raw
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "[device_bridge] 自动生成 API Key 失败：%s。"
-                "请在面板「API Keys」手动创建并填入 astrbot_api_key。",
-                exc,
+        if not getattr(self, "_warned_no_key", False):
+            self._warned_no_key = True
+            logger.warning(
+                "[device_bridge] 未配置 astrbot_api_key：部分功能（身份列表、写回微信会话）不可用。"
+                "请到面板「API Keys」手动创建后填进插件配置。"
             )
-            return ""
+        return ""
 
-    # ================= 能力实现 =================
     def _resolve_sid(self, session_id) -> str:
         """决定这轮用哪个会话标识：多设备开启时按设备分线。"""
         base = (self.cfg.get("astrbot_session_id") or "xiaozhi-wx").strip()
@@ -973,7 +909,7 @@ class DeviceBridge(Star):
                 self._bg_tasks.add(bg)
                 bg.add_done_callback(self._bg_tasks.discard)
                 self._metric("long_task")
-                return f"{self._alias()}稍等一下 这个要花点时间 我弄完马上告诉你"
+                return "稍等我一下"
         except Exception as exc:  # noqa: BLE001
             self._last_error = str(exc)[:160]
             self._metric("error")
@@ -1304,6 +1240,17 @@ class DeviceBridge(Star):
             return ""
         return t
 
+    async def _ctx_send(self, umo: str, text: str) -> tuple[bool, str]:
+        """用插件官方接口发消息，不需要 API Key。"""
+        try:
+            from astrbot.core.message.components import Plain
+            from astrbot.core.message.message_event_result import MessageChain
+
+            await self.context.send_message(umo, MessageChain([Plain(text)]))
+            return True, "已发送"
+        except Exception as exc:  # noqa: BLE001
+            return False, f"经由 context 发送失败：{exc}"
+
     async def _push(self, text: str) -> str:
         """发一段文本到绑定的微信：带节流、去重、失败重试。
 
@@ -1334,31 +1281,19 @@ class DeviceBridge(Star):
             await asyncio.sleep(wait)
             now = time.time()
 
-        base = (self.cfg.get("astrbot_base_url") or "http://127.0.0.1:6185").rstrip("/")
-        import httpx
-
         result = "失败"
         retry = int(self.cfg.get("push_max_retry") or 0)
         plan = [0, 1.0, 2.0][: max(1, retry + 1)]
         for attempt, backoff in enumerate(plan, start=1):
             if backoff:
                 await asyncio.sleep(backoff)
-            try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=10)) as client:
-                    r = await client.post(
-                        f"{base}/api/v1/im/messages",
-                        headers=self._api_headers(),
-                        json={"umo": umo, "message": safe},
-                    )
-                if r.status_code == 200:
-                    self._last_push_at = time.time()
-                    self._last_push_text = safe
-                    return "已发送"
-                result = f"失败 {r.status_code}: {r.text[:120]}"
-                logger.warning("[device_bridge] 推送失败（第 %d 次）：%s", attempt, result)
-            except Exception as exc:  # noqa: BLE001
-                result = f"异常：{exc}"
-                logger.warning("[device_bridge] 推送异常（第 %d 次）：%s", attempt, exc)
+            ok, msg = await self._ctx_send(umo, safe)
+            if ok:
+                self._last_push_at = time.time()
+                self._last_push_text = safe
+                return "已发送"
+            result = msg
+            logger.warning("[device_bridge] 推送失败（第 %d 次）：%s", attempt, msg)
         return result
 
     def _api_headers(self) -> dict:
@@ -1371,35 +1306,27 @@ class DeviceBridge(Star):
         umo = self._mirror_umo()
         if not umo:
             return "（未配置微信平台/用户，发不了）"
-        base = (self.cfg.get("astrbot_base_url") or "http://127.0.0.1:6185").rstrip("/")
-        import httpx
-
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=10)) as client:
-                r = await client.post(
-                    f"{base}/api/v1/im/messages",
-                    headers=self._api_headers(),
-                    json={"umo": umo, "message": text},
-                )
-            if r.status_code == 200:
-                return "已发到微信"
-            return f"发送失败：HTTP {r.status_code}"
-        except Exception as exc:  # noqa: BLE001
-            return f"发送异常：{exc}"
+        ok, msg = await self._ctx_send(umo, text)
+        return "已发到微信" if ok else msg
 
     async def _list_bots(self) -> str:
-        base = (self.cfg.get("astrbot_base_url") or "http://127.0.0.1:6185").rstrip("/")
-        import httpx
-
+        """列出可推送的会话身份。不需要 API Key：直接只读查 conversations 表。"""
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20, connect=10)) as client:
-                r = await client.get(f"{base}/api/v1/im/bots", headers=self._api_headers())
-            if r.status_code != 200:
-                return f"获取失败：HTTP {r.status_code}"
-            return json.dumps(r.json().get("data", {}), ensure_ascii=False)[:800]
+            con = sqlite3.connect(f"file:{DEFAULT_DB}?mode=ro", uri=True)
+            try:
+                rows = con.execute(
+                    "select platform_id, user_id, count(*) as n, max(updated_at) as t "
+                    "from conversations group by platform_id, user_id order by t desc limit 30"
+                ).fetchall()
+            finally:
+                con.close()
+            items = [
+                {"platform": r[0], "user_id": r[1], "messages": r[2], "updated_at": str(r[3])}
+                for r in rows
+            ]
+            return json.dumps({"ok": True, "items": items}, ensure_ascii=False)[:800]
         except Exception as exc:  # noqa: BLE001
             return f"获取异常：{exc}"
-
 
     # ---------- 聊天指令：/小智推送 开|关|状态 ----------
     @filter.command("小智推送")
@@ -1735,6 +1662,7 @@ class DeviceBridge(Star):
         try:
             base = (self.cfg.get("astrbot_base_url") or "http://127.0.0.1:6185").rstrip("/")
             if not self._api_key:
+                logger.info("[device_bridge] 未配置 API Key，请在面板手动重载插件使配置生效")
                 return False
             async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=10)) as client:
                 r = await client.post(
@@ -2079,15 +2007,11 @@ class DeviceBridge(Star):
             return web.json_response({"ok": False, "error": self._human_error(exc)}, status=500)
 
     def _log_lines(self, n: int = 50) -> list[str]:
-        path = os.path.join(PLUGIN_DIR, "xiaozhi.log")
-        if not os.path.exists(path):
-            return ["（还没有日志）"]
-        try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                lines = f.read().splitlines()
-            return [l[:300] for l in lines[-max(1, min(n, 500)):]]
-        except Exception as exc:  # noqa: BLE001
-            return [f"读取日志失败：{exc}"]
+        """不再写本地日志文件，日志统一走 astrbot 的 logger。"""
+        return [
+            "插件不再写自己的日志文件，日志统一由 AstrBot 记录。",
+            "查看：面板 → 日志，或控制台/容器输出，过滤 [device_bridge]。",
+        ]
 
     async def _h_logs(self, request: web.Request) -> web.Response:
         """最近 N 行日志（只读）。"""
@@ -2098,10 +2022,11 @@ class DeviceBridge(Star):
         return web.json_response({"ok": True, "lines": self._log_lines(n)})
 
     async def _h_logs_download(self, request: web.Request) -> web.StreamResponse:
-        path = os.path.join(PLUGIN_DIR, "xiaozhi.log")
-        if not os.path.exists(path):
-            raise web.HTTPNotFound()
-        return web.FileResponse(path, headers={"Content-Type": "text/plain; charset=utf-8"})
+        """不再提供日志下载：插件不落盘，日志统一由 AstrBot 记录。"""
+        return web.json_response(
+            {"ok": False, "error": "日志不再落盘，请到面板日志页或控制台查看"},
+            status=410,
+        )
 
 
     # ================= P2：工具扩展 / 指标 / 导入导出 =================
