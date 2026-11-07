@@ -219,7 +219,7 @@ _GEN_FILE = "/tmp/astrbot_device_bridge_gen.txt"
     "astrbot_plugin_device_bridge",
     "轩宇(xuanyu)",
     "把小智 ESP32 接入 AstrBot：填 token 即用，共用人格、工具与记忆",
-    "v1.6.6",
+    "v1.6.7",
 )
 class DeviceBridge(Star):
     def __init__(self, context: Context, config: dict | None = None):
