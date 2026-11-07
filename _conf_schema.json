@@ -74,5 +74,23 @@
     "type": "bool",
     "default": false,
     "hint": "开启后每台设备一条独立会话，互不串话；关闭则所有设备共用一条，保持旧行为。"
+  },
+  "context_seed_enable": {
+    "description": "【高级】回答前同步微信上下文",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，设备侧回答前会把微信里新聊的内容合并进来，让两边记忆接得上。"
+  },
+  "context_seed_messages": {
+    "description": "【高级】每次同步多少条微信消息",
+    "type": "int",
+    "default": 60,
+    "hint": "按「新增内容」合并，不会覆盖设备自己的历史。条数越多记得越久，但也更慢。建议 40~100。"
+  },
+  "context_max_messages": {
+    "description": "【高级】设备侧上下文总上限",
+    "type": "int",
+    "default": 200,
+    "hint": "合并后超过这个条数，就丢掉最早的，避免无限膨胀。"
   }
 }

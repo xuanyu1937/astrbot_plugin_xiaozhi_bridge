@@ -219,7 +219,7 @@ _GEN_FILE = "/tmp/astrbot_device_bridge_gen.txt"
     "astrbot_plugin_device_bridge",
     "轩宇(xuanyu)",
     "把小智 ESP32 接入 AstrBot：填 token 即用，共用人格、工具与记忆",
-    "1.6.5",
+    "v1.6.6",
 )
 class DeviceBridge(Star):
     def __init__(self, context: Context, config: dict | None = None):
@@ -1046,53 +1046,84 @@ class DeviceBridge(Star):
             return ""
 
     async def _seed_context(self) -> None:
-        """把微信会话最近的历史灌进设备会话，让小智「记得」微信里聊过什么。"""
+        """把微信会话里「新发生」的内容合并进设备会话。
+
+        旧实现是「用微信最近 N 条直接覆盖设备历史」，导致设备侧记忆被反复截断。
+        现在改成合并：保留设备自己的历史，只把微信新增的部分追加进去，并去重。
+        """
         if not self.cfg.get("context_seed_enable", True):
             return
         wechat_umo = self._mirror_umo()
         device_umo = self._device_umo()
         if not wechat_umo or not device_umo:
             return
-        limit = int(self.cfg.get("context_seed_messages") or 20)
+
+        limit = int(self.cfg.get("context_seed_messages") or 60)
+        max_total = int(self.cfg.get("context_max_messages") or 200)
+
         try:
             conv_mgr = self.context.conversation_manager
             cid_w = await conv_mgr.get_curr_conversation_id(wechat_umo) or self._find_conversation_id(wechat_umo)
             if not cid_w:
                 return
 
-            # 快速路径：微信那边没新消息就不用重复灌上下文
+            # 微信侧没新消息就跳过
             stamp = self._conv_stamp(cid_w)
             if stamp and stamp == getattr(self, "_seed_stamp", None):
                 return
-            src = await conv_mgr.get_conversation(wechat_umo, cid_w)
-            raw = getattr(src, "history", None) or getattr(src, "content", None) or []
-            if not isinstance(raw, list) or not raw:
+
+            raw_w = self._db_history(cid_w) or []
+
+            def _pick(msgs, n):
+                out = []
+                for m in msgs[-n:]:
+                    if not isinstance(m, dict):
+                        continue
+                    if m.get("role") not in ("user", "assistant"):
+                        continue          # 丢掉 tool / system / checkpoint
+                    parts = m.get("content") or []
+                    if isinstance(parts, str):
+                        text = parts
+                    else:
+                        text = "".join(
+                            str(p.get("text") or "") for p in parts
+                            if isinstance(p, dict) and p.get("type") in ("text", "plain")
+                        )
+                    text = text.strip()
+                    if text:
+                        out.append({"role": m["role"], "content": [{"type": "text", "text": text}]})
+                return out
+
+            incoming = _pick(raw_w, limit)
+            if not incoming:
                 return
 
-            tail: list[dict] = []
-            for msg in raw[-limit:]:
-                if not isinstance(msg, dict):
-                    continue
-                role = msg.get("role")
-                if role not in ("user", "assistant"):
-                    continue
-                parts = msg.get("content") or []
-                text = "".join(
-                    str(p.get("text") or "")
-                    for p in parts
-                    if isinstance(p, dict) and p.get("type") in ("text", "plain")
-                ).strip()
-                if text:
-                    tail.append({"role": role, "content": [{"type": "text", "text": text}]})
-            if not tail:
-                return
-
+            # 设备现有历史（不清空）
             cid_d = await conv_mgr.get_curr_conversation_id(device_umo)
             if not cid_d:
                 cid_d = await conv_mgr.new_conversation(device_umo, title="小智设备")
-            await conv_mgr.update_conversation(device_umo, cid_d, history=tail)
+            raw_d = self._db_history(cid_d) or []
+            existing = _pick(raw_d, max_total) if raw_d else []
+
+            # 合并去重：按 (role, 文本) 指纹
+            seen = set()
+            merged = []
+            for m in existing + incoming:
+                t = m["content"][0]["text"]
+                key = (m["role"], t)
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(m)
+
+            # 总量兜底，超了就丢最早的
+            if len(merged) > max_total:
+                merged = merged[-max_total:]
+
+            await conv_mgr.update_conversation(device_umo, cid_d, history=merged)
             self._seed_stamp = stamp
-            logger.info("[device_bridge] 已同步微信上下文 %d 条 -> 设备会话", len(tail))
+            logger.info("[device_bridge] 上下文合并：设备侧 %d 条 + 微信新增 → 共 %d 条",
+                        len(existing), len(merged))
         except Exception as exc:  # noqa: BLE001
             logger.warning("[device_bridge] 同步上下文失败：%s", exc)
 
@@ -1243,6 +1274,36 @@ class DeviceBridge(Star):
             logger.warning("[device_bridge] 查会话失败：%s", exc)
             return ""
 
+    # ---------- 推送前的文本清洗：切掉工具调用残渣 ----------
+    _JUNK_MARKERS = ('{, "ts":', "{'ts':", ', "ts":', '{"id": "call_', "{'id': 'call_",
+                     '[SYSTEM NOTICE]', '[CronJob]')
+    _JUNK_LINE_RE = re.compile(
+        r'(Command completed with exit code|"result":\s*"|\'result\':\s*\''
+        r'|tool_loop_agent_runner|astrbot_execute_)'
+    )
+
+    def _clean_push(self, text: str) -> str:
+        """去掉工具调用 JSON、系统提醒块等，避免推给用户一堆代码。"""
+        t = str(text or "")
+        # 1) 从第一个残渣标记处整段截断（残渣通常在句尾）
+        cut = len(t)
+        for m in self._JUNK_MARKERS:
+            idx = t.find(m)
+            if idx != -1:
+                cut = min(cut, idx)
+        if cut < len(t):
+            t = t[:cut]
+        # 2) 丢掉含工具执行痕迹的整行
+        lines = [ln for ln in t.splitlines() if not self._JUNK_LINE_RE.search(ln)]
+        t = "\n".join(lines)
+        # 3) 清理多余的空白与残留标点
+        t = re.sub(r"[ \t]{2,}", " ", t)
+        t = re.sub(r"\n{3,}", "\n\n", t).strip()
+        # 4) 截断后如果只剩很短的无意义内容，就返回空（调用方会跳过推送）
+        if len(t) < 2:
+            return ""
+        return t
+
     async def _push(self, text: str) -> str:
         """发一段文本到绑定的微信：带节流、去重、失败重试。
 
@@ -1253,8 +1314,11 @@ class DeviceBridge(Star):
         if not umo:
             return "（未配置微信平台/用户）"
 
-        # 清洗 + 长度保护
-        safe = (text or "").replace("\u200b", "").strip()
+        # 清洗 + 长度保护（先切工具残渣，再截长度）
+        safe = self._clean_push(text).replace("\u200b", "").strip()
+        if not safe:
+            logger.info("[device_bridge] 清洗后为空，跳过推送")
+            return "（清洗后为空，跳过）"
         if len(safe) > 400:
             safe = safe[:400] + "…"
         if not safe:
