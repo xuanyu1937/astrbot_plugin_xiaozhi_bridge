@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-runtime.json
+.ruff_cache/
 state.json
 *.log
 .env

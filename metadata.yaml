@@ -1,19 +1,8 @@
-name: astrbot_plugin_device_bridge
+name: astrbot_plugin_xiaozhi_bridge
 display_name: 小智设备桥接
-desc: 把 小智(xiaozhi.me / ESP32) 接入 AstrBot：填一个 MCP Token 即可，让人格/记忆/工具全部复用
-short_desc: 填一个小智 MCP Token，让设备用你在 AstrBot 里的人格说话
-help: |
-  1) 小智控制台 → 智能体 → MCP 接入点，复制 Token
-  2) 打开插件配置页，填 Token 并选择发送人身份
-  3) 在小智控制台的「角色介绍」里写清楚：只有出现召唤词才调用工具
-  详细说明见 README。
-support_platforms:
-  - aiocqhttp
-  - weixin_oc
-  - webchat
-  - telegram
-  - wecom
-version: v1.6.13
+desc: 把小智（xiaozhi.me / ESP32 语音助手）的 MCP 接入点接到 AstrBot，设备说话由 AstrBot 的人格回答，人设、记忆、知识库、工具全部复用。
+short_desc: 填一个小智 MCP Token，让设备用 AstrBot 的人格说话
+version: 2.0.0
 author: 轩宇（xuanyu）
-repo: ""
+repo: https://github.com/xuanyu1937/astrbot_plugin_xiaozhi_bridge
 astrbot_version: ">=4.26.1"

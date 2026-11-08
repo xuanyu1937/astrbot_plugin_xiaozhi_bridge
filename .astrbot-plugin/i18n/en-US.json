@@ -1,0 +1,8 @@
+{
+  "views": {
+    "dashboard": {
+      "title": "Xiaozhi Bridge",
+      "description": "Connection status, self-check and push toggles"
+    }
+  }
+}

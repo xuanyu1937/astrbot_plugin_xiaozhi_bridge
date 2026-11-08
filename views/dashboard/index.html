@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>小智桥接</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <h1>小智桥接</h1>
+      <span id="pill" class="pill gray">读取中…</span>
+    </header>
+    <section class="card">
+      <h2>自检</h2>
+      <ul id="checkList" class="check"></ul>
+    </section>
+    <section class="card">
+      <h2>开关</h2>
+      <label class="row"><span>推送对话</span><input type="checkbox" id="pushToggle" /></label>
+      <label class="row"><span>召唤词接管</span><input type="checkbox" id="triggerToggle" /></label>
+      <label class="row"><span>静音时段</span>
+        <input type="text" id="quiet" placeholder="23:30-07:30" /></label>
+      <div class="actions">
+        <button id="saveQuiet">保存静音时段</button>
+        <button id="reconnect">重新连接</button>
+        <button id="cleanup">清理缓存</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>运行信息</h2>
+      <dl id="info" class="info"></dl>
+      <p class="hint">Token、身份、推送目标请到「插件配置」页修改。</p>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

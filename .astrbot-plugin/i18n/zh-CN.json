@@ -1,0 +1,8 @@
+{
+  "views": {
+    "dashboard": {
+      "title": "小智桥接",
+      "description": "查看连接状态、自检结果与推送开关"
+    }
+  }
+}

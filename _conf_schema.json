@@ -1,121 +1,251 @@
 {
   "xiaozhi_token": {
-    "description": "小智接入点 Token（必填）",
+    "description": "小智 MCP 接入点 Token",
     "type": "string",
     "default": "",
-    "obvious_hint": true,
-    "hint": "小智控制台 → 智能体 → MCP 接入点，复制 token 贴这里。可只贴 token，也可贴整条 wss 地址；留空表示不改动。"
+    "hint": "小智控制台复制整条接入地址或 token；填完整 ws/wss 地址也可以。",
+    "secret": true
   },
   "astrbot_api_key": {
-    "description": "AstrBot API Key（设备提问用）",
+    "description": "AstrBot API Key",
     "type": "string",
     "default": "",
-    "obvious_hint": true,
-    "hint": "面板 → API Keys 手动创建后粘贴进来，权限给 chat 就够。留空时设备提问不可用（会返回提示），推送与身份列表不受影响。插件不会自动创建或修改数据库里的 key。"
+    "hint": "面板 → API Keys 手动创建，权限给 chat 即可。",
+    "secret": true
+  },
+  "astrbot_base_url": {
+    "description": "AstrBot 本机地址",
+    "type": "string",
+    "default": "http://127.0.0.1:6185",
+    "hint": "默认 http://127.0.0.1:6185，改过面板端口才需要动。"
+  },
+  "request_timeout": {
+    "description": "请求超时（秒）",
+    "type": "int",
+    "default": 120,
+    "hint": "等 AstrBot 回答的最长时间。"
   },
   "unified_user_id": {
-    "description": "发送人身份（必填）",
+    "description": "发送人身份",
+    "type": "list",
+    "default": [],
+    "hint": "选谁的身份跟设备对话。",
+    "_special": "sender_id"
+  },
+  "push_target_umo": {
+    "description": "推送目标会话",
     "type": "string",
     "default": "",
-    "obvious_hint": true,
-    "hint": "填的是「你是谁」，不是人格名字。微信和小智只是渠道，填同一个人，两边就归到同一个人身上。建议用配置页下拉直接选。"
+    "hint": "留空则用平台 + 身份自动拼接。",
+    "_special": "umo"
+  },
+  "push_platform_id": {
+    "description": "推送平台 ID",
+    "type": "string",
+    "default": "",
+    "hint": "例如 weixin_personal_ezgt；留空按身份推断。"
   },
   "push_to_wechat": {
-    "description": "把对话推送到微信",
+    "description": "把对话推送出去",
     "type": "bool",
     "default": true,
-    "hint": "小智那边聊完，微信收到一条带标签的消息。"
+    "hint": "开启后一问一答会推到目标会话。"
+  },
+  "push_with_question": {
+    "description": "推送时带上提问",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭则只推回复。"
+  },
+  "push_bot_tag": {
+    "description": "设备侧标签",
+    "type": "string",
+    "default": "【设备】",
+    "hint": "推送里代表设备说话的标签。"
+  },
+  "push_user_tag": {
+    "description": "自己这侧标签",
+    "type": "string",
+    "default": "【我】",
+    "hint": "推送里代表 AstrBot 说话的标签。"
+  },
+  "mirror_enable": {
+    "description": "补写进会话记录",
+    "type": "bool",
+    "default": true,
+    "hint": "设备对话会写进目标会话历史。"
   },
   "require_trigger": {
-    "description": "只在被召唤时转接",
+    "description": "需要召唤词才接管",
     "type": "bool",
     "default": true,
-    "hint": "开启后要说召唤词才转给 AstrBot 的人格，否则小智自己回答。召唤词在下面「召唤词」里改。"
+    "hint": "关闭后设备说什么都由 AstrBot 回答。"
   },
   "trigger_words": {
-    "description": "【高级】召唤词（用逗号分隔）",
+    "description": "召唤词",
     "type": "list",
     "default": [
       "小助手"
     ],
-    "hint": "句子里出现任一个词就转给 AstrBot 里的人格。默认只是占位，必须改成你自己人格的名字，否则叫不到。"
+    "hint": "句子里出现就交给 AstrBot。"
   },
-  "astrbot_session_id": {
-    "description": "【高级】设备会话标识",
-    "type": "string",
-    "default": "xiaozhi-wx",
-    "hint": "保持默认即可，用来维持设备侧连续记忆。"
+  "exit_words": {
+    "description": "退出词",
+    "type": "list",
+    "default": [
+      "退出",
+      "不聊了",
+      "结束",
+      "换回小智"
+    ],
+    "hint": "出现这些词立刻退回小智本体。"
   },
   "trigger_idle_minutes": {
-    "description": "【高级】多久没说话自动退出",
+    "description": "接管空闲退出（分钟）",
     "type": "int",
     "default": 30,
-    "hint": "召唤后一直由 AstrBot 回答，超过这个分钟数没动静自动退回小智。"
-  },
-  "push_bot_tag": {
-    "description": "【高级】推送里“对方说的话”标签",
-    "type": "string",
-    "default": "【设备】",
-    "hint": "标在设备一侧说的话前面，方便区分谁说的。"
-  },
-  "push_user_tag": {
-    "description": "【高级】推送里“我说的话”标签",
-    "type": "string",
-    "default": "【我】",
-    "hint": "标在你（人格）回复的前面。"
+    "hint": "0 表示不自动退出。"
   },
   "user_alias": {
-    "description": "怎么称呼用户",
+    "description": "对你的称呼",
     "type": "string",
     "default": "哥哥",
-    "hint": "插件自己说的那几句话里用的称呼（比如「X 稍等一下」）。"
+    "hint": "占位句里会用到。"
   },
   "quiet_hours": {
     "description": "静音时段",
     "type": "string",
     "default": "",
-    "hint": "格式 23:30-07:30，支持跨零点。这段内不推送、不主动打招呼，对话照常。留空=不启用。"
+    "hint": "形如 23:30-07:30，支持跨零点；该时段不推送。"
+  },
+  "astrbot_session_id": {
+    "description": "设备会话标识",
+    "type": "string",
+    "default": "xiaozhi-wx",
+    "hint": "设备侧会话固定后缀。"
   },
   "multi_device_enable": {
     "description": "多设备独立记忆",
     "type": "bool",
     "default": false,
-    "hint": "开启后每台设备一条独立会话，互不串话；关闭则所有设备共用一条，保持旧行为。"
+    "hint": "按设备 id 区分会话。"
   },
   "context_seed_enable": {
-    "description": "【高级】回答前同步微信上下文",
+    "description": "回答前同步上下文",
     "type": "bool",
     "default": true,
-    "hint": "开启后，设备侧回答前会把微信里新聊的内容合并进来，让两边记忆接得上。"
+    "hint": "把目标会话最近内容合并进设备会话。"
   },
   "context_seed_messages": {
-    "description": "【高级】每次同步多少条微信消息",
+    "description": "每次同步多少条",
     "type": "int",
     "default": 60,
-    "hint": "按「新增内容」合并，不会覆盖设备自己的历史。条数越多记得越久，但也更慢。建议 40~100。"
+    "hint": "取目标会话最近这么多条。"
   },
   "context_max_messages": {
-    "description": "【高级】设备侧上下文总上限",
+    "description": "设备会话上限",
     "type": "int",
     "default": 200,
-    "hint": "合并后超过这个条数，就丢掉最早的，避免无限膨胀。"
+    "hint": "超过就丢最早的。"
   },
   "long_task_notice": {
-    "description": "长任务先回一句占位",
+    "description": "长任务先回占位",
     "type": "bool",
     "default": true,
-    "hint": "开启后，模型 5 秒内没答完就先回一句「稍等一下」，避免设备端判定卡顿。"
+    "hint": "避免设备判定卡顿。"
   },
   "long_task_threshold_sec": {
-    "description": "占位提示触发秒数",
+    "description": "占位触发秒数",
     "type": "int",
     "default": 5,
-    "hint": "超过这个秒数还没答完就先回占位句。小智端通常 6~8 秒就判定超时，建议 4~6。"
+    "hint": "建议 4~6。"
   },
   "long_task_remind_sec": {
-    "description": "长任务进度提醒间隔（秒）",
+    "description": "进度提醒间隔（秒）",
     "type": "int",
     "default": 45,
-    "hint": "任务超过这么久还没完成，会再发一句「还在弄」。"
+    "hint": "长任务期间每隔多久推一句。"
+  },
+  "boot_greeting_mode": {
+    "description": "开机问候处理",
+    "type": "string",
+    "default": "skip",
+    "hint": "skip 静默；greet 主动打招呼。",
+    "options": [
+      "skip",
+      "greet"
+    ]
+  },
+  "drop_boot_greeting": {
+    "description": "识别开机问候",
+    "type": "bool",
+    "default": true,
+    "hint": "识别到就按上面模式处理。"
+  },
+  "disable_session_tts": {
+    "description": "关闭设备会话 TTS",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后只取文本不转语音。"
+  },
+  "ask_tool_name": {
+    "description": "提问工具名",
+    "type": "string",
+    "default": "ask_astrbot",
+    "hint": "改名后要在小智控制台重新同步。"
+  },
+  "persona_label": {
+    "description": "人格标签",
+    "type": "string",
+    "default": "",
+    "hint": "推送和占位句里指代自己，留空用默认说法。"
+  },
+  "music_enable": {
+    "description": "点歌功能",
+    "type": "bool",
+    "default": true,
+    "hint": "支持「点歌/放首歌」。"
+  },
+  "music_send_file": {
+    "description": "点歌时发音频文件",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭则只回歌名和链接。"
+  },
+  "music_reply_with_url": {
+    "description": "回复里带直链",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭则只给歌名。"
+  },
+  "music_cache_ttl": {
+    "description": "音频缓存有效期（秒）",
+    "type": "int",
+    "default": 900,
+    "hint": "这段时间内重复点不重新下载。"
+  },
+  "music_cleanup_enable": {
+    "description": "自动清理点歌缓存",
+    "type": "bool",
+    "default": true,
+    "hint": "定期删过期音频。"
+  },
+  "music_cleanup_hours": {
+    "description": "清理间隔（小时）",
+    "type": "int",
+    "default": 6,
+    "hint": "多久跑一次。"
+  },
+  "music_keep_days": {
+    "description": "缓存保留天数",
+    "type": "int",
+    "default": 3,
+    "hint": "超过就删。"
+  },
+  "music_max_mb": {
+    "description": "缓存总容量上限（MB）",
+    "type": "int",
+    "default": 200,
+    "hint": "超过从最旧的开始删。"
   }
 }
