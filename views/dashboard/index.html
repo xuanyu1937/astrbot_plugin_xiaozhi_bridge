@@ -29,6 +29,28 @@
       </div>
     </section>
     <section class="card">
+      <h2>常用设置</h2>
+      <label class="row"><span>设备回复最多字数</span>
+        <input type="number" id="replyMax" min="40" max="2000" /></label>
+      <label class="row"><span>占位触发（秒）</span>
+        <input type="number" id="ltSec" min="0" max="120" /></label>
+      <label class="row"><span>进度提醒（秒）</span>
+        <input type="number" id="ltRemind" min="10" max="600" /></label>
+      <label class="row"><span>上下文同步条数</span>
+        <input type="number" id="seedN" min="1" max="500" /></label>
+      <label class="row"><span>设备会话上限</span>
+        <input type="number" id="seedMax" min="50" max="2000" /></label>
+      <label class="row"><span>记住的话写知识库</span>
+        <input type="checkbox" id="kbEnable" /></label>
+      <div class="actions">
+        <button id="saveSettings">保存设置</button>
+        <button id="exportCfg">导出</button>
+        <button id="importCfg">导入</button>
+      </div>
+      <p class="hint">Token、身份、推送目标仍在「插件配置」页改；换机器时用导出/导入搬走全套设置。</p>
+    </section>
+
+    <section class="card">
       <h2>运行信息</h2>
       <dl id="info" class="info"></dl>
       <p class="hint">Token、身份、推送目标请到「插件配置」页修改。</p>

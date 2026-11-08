@@ -12,22 +12,37 @@ class ChatError(RuntimeError):
 
 
 _JUNK = [
-    re.compile(r"\{[^{}]*\"id\"\s*:\s*\"call_[^\"]*\"[^{}]*\}"),
+    # 工具调用记录的整段 JSON：从 {"id": "call_ 开始，一直吞到配对的 } 为止
+    re.compile(r"\{*\s*\"id\"\s*:\s*\"call_[\s\S]*?\"(?:result|ts)\"[\s\S]*?\}\s*\}*"),
+    re.compile(r"\"id\"\s*:\s*\"call_[\s\S]*?\"?\}"),
+    re.compile(r"```[\s\S]*?```"),          # 代码块整段丢掉
+    re.compile(r"`{1,3}[^`\n]{1,200}`{1,3}"),  # 行内代码
     re.compile(r"&&[^&]{1,32}&&"),
     re.compile(r"https?://\S+"),
 ]
 _SKIP_CHAIN = ("reasoning", "tool", "tool_call", "function")
 
 
-def sanitize(text: str) -> str:
+def sanitize(text: str, limit: int = 300) -> str:
     """去掉表情包标记、URL、工具调用残渣和 Markdown 记号。"""
     out = str(text or "")
     for pattern in _JUNK:
         out = pattern.sub("", out)
     out = re.sub(r"[*`~]+", "", out)
     out = re.sub(r"^#{1,6}\s*", "", out, flags=re.M)
-    out = re.sub(r"\s{2,}", " ", out)
-    return out.strip()
+    out = out.strip(" }]{[\"',")
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    out = out.strip()
+    # 推送和朗读都不适合太长：超长按句末截断，避免把整段日志念出来
+    if limit and len(out) > limit:
+        cut = out[:limit]
+        for mark in ("。", "！", "？", "\n"):
+            pos = cut.rfind(mark)
+            if pos > limit * 0.5:
+                return cut[: pos + 1].strip()
+        return cut.strip() + "…"
+    return out
 
 
 def _snapshot_text(event: dict) -> str:
@@ -50,6 +65,7 @@ async def ask_astrbot(
     session_id: str,
     username: str,
     timeout: int = 120,
+    max_chars: int = 300,
 ) -> str:
     """POST /api/v1/chat，按 SSE 取增量文本；拿不到就回退 run_snapshot。"""
     if not api_key:
@@ -104,4 +120,4 @@ async def ask_astrbot(
     except Exception as exc:  # noqa: BLE001
         raise ChatError(f"连不上 AstrBot：{exc}") from exc
 
-    return sanitize("".join(chunks)) or sanitize(snapshot)
+    return sanitize("".join(chunks), max_chars) or sanitize(snapshot, max_chars)

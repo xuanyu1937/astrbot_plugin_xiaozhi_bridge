@@ -41,6 +41,7 @@ _music = _load_sibling("music")
 _push = _load_sibling("push")
 _settings = _load_sibling("settings")
 _sync = _load_sibling("session_sync")
+_kb = _load_sibling("kb_memory")
 
 ChatError = _chat.ChatError
 ask_astrbot = _chat.ask_astrbot
@@ -54,6 +55,8 @@ search = _music.search
 Pusher = _push.Pusher
 Settings = _settings.Settings
 SessionSync = _sync.SessionSync
+kb_match = _kb.match_remember
+kb_save = _kb.save
 
 DATA_PREFIX = f"/{PLUGIN_NAME}/"
 
@@ -62,7 +65,7 @@ DATA_PREFIX = f"/{PLUGIN_NAME}/"
     PLUGIN_NAME,
     "轩宇(xuanyu)",
     "把小智（xiaozhi.me / ESP32）接入 AstrBot，设备说话由 AstrBot 的人格回答",
-    "2.0.0",
+    "2.1.0",
 )
 class XiaozhiBridge(Star):
     """桥接主体：管理 MCP 连接、对话编排、推送与视图接口。"""
@@ -189,7 +192,18 @@ class XiaozhiBridge(Star):
         verdict, text = self._gate(message)
         if verdict != "pass":
             return ""
-        return await self._answer(text, device_id, record=True)
+
+        # 「记住…」这类话先写知识库，再照常回答
+        remembered = ""
+        if self.cfg.bool("kb_enable"):
+            content = kb_match(text, self.cfg.list("kb_remember_words"))
+            if content:
+                remembered = await kb_save(self.context, self.cfg, content)
+
+        answer = await self._answer(text, device_id, record=True)
+        if remembered:
+            return f"记住了"
+        return answer
 
     def _is_boot_greeting(self, message: str) -> bool:
         """设备每次上电会说的固定句子，按长度和开头粗略识别。"""
@@ -273,6 +287,7 @@ class XiaozhiBridge(Star):
                 self._session_for(device_id),
                 self.cfg.sender_id or "哥哥",
                 self.cfg.int("request_timeout", 10, 600),
+                self.cfg.int("reply_max_chars", 40, 2000),
             )
             self.last_error = ""
             return answer or "嗯，我在。"
@@ -518,8 +533,95 @@ class XiaozhiBridge(Star):
             except Exception as exc:  # noqa: BLE001
                 return error_response(f"清理失败：{exc}")
 
+        async def _settings():
+            """返回可编辑的设置项，密钥只给打码后的样子。"""
+            conf = dict(self.astrbot_config or {})
+            hidden = {"xiaozhi_token"}
+            safe = {k: v for k, v in conf.items() if not k.endswith("_key") and k not in hidden}
+            token = str(conf.get("xiaozhi_token") or "")
+            safe["xiaozhi_token_masked"] = f"…{token[-6:]}" if token else ""
+            return json_response({
+                "settings": safe,
+                "editable": [
+                    "reply_max_chars", "long_task_threshold_sec", "long_task_remind_sec",
+                    "quiet_hours", "push_to_wechat", "push_with_question", "mirror_enable",
+                    "context_seed_enable", "context_seed_messages", "context_max_messages",
+                    "require_trigger", "trigger_words", "kb_enable", "music_enable",
+                ],
+            })
+
+        async def _settings_save():
+            try:
+                data = await web_request.json(default={})
+            except Exception:  # noqa: BLE001
+                return error_response("请求体必须是 JSON")
+            if not isinstance(data, dict):
+                return error_response("请求体必须是对象")
+            allowed = {
+                "reply_max_chars", "long_task_threshold_sec", "long_task_remind_sec",
+                "quiet_hours", "push_to_wechat", "push_with_question", "mirror_enable",
+                "context_seed_enable", "context_seed_messages", "context_max_messages",
+                "require_trigger", "trigger_words", "kb_enable", "music_enable",
+            }
+            patch = {k: v for k, v in data.items() if k in allowed}
+            if not patch:
+                return error_response("没有可保存的字段")
+            try:
+                self.astrbot_config.save_config(patch)
+                self.cfg = Settings(self.astrbot_config)
+                return json_response({"ok": True, "changed": sorted(patch)})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[xiaozhi_bridge] 保存设置失败：%s", exc)
+                return error_response(f"保存失败：{exc}")
+
+        async def _export():
+            """把整套配置导成 JSON，换机器时用它恢复。
+
+            密钥不外泄：token / api_key 一律导出成空串，导入时留空就沿用本机的，
+            这样导出的文件可以随手存云盘，不会带着凭据到处跑。
+            """
+            try:
+                secret_keys = {"xiaozhi_token", "astrbot_api_key"}
+                conf = {
+                    k: ("" if k in secret_keys else v)
+                    for k, v in dict(self.astrbot_config or {}).items()
+                }
+                payload = {"plugin": PLUGIN_NAME, "version": "2.1.0", "config": conf}
+                payload["notice"] = "密钥未导出，导入后请重新填 Token 与 API Key"
+                return json_response(payload)
+            except Exception as exc:  # noqa: BLE001
+                return error_response(f"导出失败：{exc}")
+
+        async def _import():
+            """导入设置：密钥字段为空则保留本机的，避免把已有配置清空。"""
+            try:
+                data = await web_request.json(default={})
+            except Exception:  # noqa: BLE001
+                return error_response("请求体必须是 JSON")
+            conf = (data or {}).get("config") if isinstance(data, dict) else None
+            if not isinstance(conf, dict):
+                return error_response("缺少 config 字段")
+
+            patch = {}
+            for key, value in conf.items():
+                if key in ("xiaozhi_token", "astrbot_api_key") and not str(value or "").strip():
+                    continue          # 留空表示沿用本机已填的
+                patch[key] = value
+
+            try:
+                self.astrbot_config.save_config(patch)
+                self.cfg = Settings(self.astrbot_config)
+                return json_response({"ok": True, "keys": len(patch)})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[xiaozhi_bridge] 导入设置失败：%s", exc)
+                return error_response(f"导入失败：{exc}")
+
         routes = [
             ("status", _status, ["GET"], "桥接状态"),
+            ("settings", _settings, ["GET"], "读设置"),
+            ("settings/save", _settings_save, ["POST"], "存设置"),
+            ("export", _export, ["GET"], "导出设置"),
+            ("import", _import, ["POST"], "导入设置"),
             ("toggle", _toggle, ["POST"], "切换推送与召唤"),
             ("quiet", _quiet, ["POST"], "保存静音时段"),
             ("reconnect", _reconnect, ["POST"], "重新连接"),

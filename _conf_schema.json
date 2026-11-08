@@ -20,66 +20,66 @@
     "hint": "默认 http://127.0.0.1:6185，改过面板端口才需要动。"
   },
   "request_timeout": {
-    "description": "请求超时（秒）",
+    "description": "单次回答最长等多久（秒）",
     "type": "int",
     "default": 120,
-    "hint": "等 AstrBot 回答的最长时间。"
+    "hint": "管什么：等 AstrBot 回答的上限，超过算失败。默认 120 够用，常跑长任务可调到 300。注意：必须大于「占位触发秒数」，否则永远拿不到完整回答。"
   },
   "unified_user_id": {
-    "description": "发送人身份",
+    "description": "用谁的身份跟设备对话",
     "type": "list",
     "default": [],
-    "hint": "选谁的身份跟设备对话。",
+    "hint": "怎么填：点下拉，从面板出现过的用户里选（通常就是你自己）。管什么：设备会话挂在谁名下，也决定推送默认发送人。不填则身份自检红、推送目标拼不出来。",
     "_special": "sender_id"
   },
   "push_target_umo": {
-    "description": "推送目标会话",
+    "description": "推送到哪个会话（可留空）",
     "type": "string",
     "default": "",
-    "hint": "留空则用平台 + 身份自动拼接。",
+    "hint": "怎么填：留空最省事，插件会用「推送平台 + 发送人身份」自动拼一条，填不填都能在视图「推送目标」那一行看到实际结果。只有想推到别的会话（比如群）时才手填完整 umo。",
     "_special": "umo"
   },
   "push_platform_id": {
-    "description": "推送平台 ID",
+    "description": "推送走哪个平台",
     "type": "string",
     "default": "",
-    "hint": "例如 weixin_personal_ezgt；留空按身份推断。"
+    "hint": "怎么填：看你的平台 ID，例如 weixin_personal_ezgt。留空时默认就是这个。不确定就在面板 → 平台 里看那一行英文 ID。"
   },
   "push_to_wechat": {
-    "description": "把对话推送出去",
+    "description": "对话要不要推到微信",
     "type": "bool",
     "default": true,
-    "hint": "开启后一问一答会推到目标会话。"
+    "hint": "开：设备一问一答会推到你微信。关：只在设备上说话，不推送。长任务完成后的结果推送也归这个总开关管。"
   },
   "push_with_question": {
-    "description": "推送时带上提问",
+    "description": "推送时带不带设备原话",
     "type": "bool",
     "default": true,
-    "hint": "关闭则只推回复。"
+    "hint": "开：推「【设备】原话 / 【我】回复」两行，能对上上下文。关：只推回复一行，更干净。"
   },
   "push_bot_tag": {
-    "description": "设备侧标签",
+    "description": "推送里代表设备的标签",
     "type": "string",
     "default": "【设备】",
-    "hint": "推送里代表设备说话的标签。"
+    "hint": "默认【设备】。喜欢别的写法就改，例如 [小智]。"
   },
   "push_user_tag": {
-    "description": "自己这侧标签",
+    "description": "推送里代表 AstrBot 的标签",
     "type": "string",
     "default": "【我】",
-    "hint": "推送里代表 AstrBot 说话的标签。"
+    "hint": "默认【我】，和设备侧的【设备】配对。改一个记得另一个也顺眼。"
   },
   "mirror_enable": {
-    "description": "补写进会话记录",
+    "description": "要不要把对话写进会话记录",
     "type": "bool",
     "default": true,
-    "hint": "设备对话会写进目标会话历史。"
+    "hint": "开：设备说的话会补写进你的微信会话历史，两边记忆接得上。关：只在设备会话里记，微信这边看不到。"
   },
   "require_trigger": {
-    "description": "需要召唤词才接管",
+    "description": "要不要先说召唤词才接管",
     "type": "bool",
     "default": true,
-    "hint": "关闭后设备说什么都由 AstrBot 回答。"
+    "hint": "开（默认）：说「小助手 …」才由 AstrBot 回答，其余交给小智本体。关：设备说什么都由 AstrBot 接，适合纯当音箱用。"
   },
   "trigger_words": {
     "description": "召唤词",
@@ -87,7 +87,7 @@
     "default": [
       "小助手"
     ],
-    "hint": "句子里出现就交给 AstrBot。"
+    "hint": "怎么填：填几个词，句子里出现任意一个就接管，例如 小助手。不用加空格，支持中文。多个词就加多行。"
   },
   "exit_words": {
     "description": "退出词",
@@ -98,154 +98,183 @@
       "结束",
       "换回小智"
     ],
-    "hint": "出现这些词立刻退回小智本体。"
+    "hint": "出现任意一个就立刻退回小智本体，这一轮不回答。默认：退出、不聊了、结束、换回小智。"
   },
   "trigger_idle_minutes": {
-    "description": "接管空闲退出（分钟）",
+    "description": "接管多久没说话就自动退出（分钟）",
     "type": "int",
     "default": 30,
-    "hint": "0 表示不自动退出。"
+    "hint": "管什么：接管状态下，超过这么久没说话就自动退回小智本体。填 0 = 永不自动退出，一直由 AstrBot 接管。默认 30。"
   },
   "user_alias": {
-    "description": "对你的称呼",
+    "description": "称呼你什么",
     "type": "string",
     "default": "哥哥",
-    "hint": "占位句里会用到。"
+    "hint": "用在占位句里，例如「稍等我一下」这类话的称呼。默认 哥哥。"
   },
   "quiet_hours": {
-    "description": "静音时段",
+    "description": "静音时段（这段时间不推送）",
     "type": "string",
     "default": "",
-    "hint": "形如 23:30-07:30，支持跨零点；该时段不推送。"
+    "hint": "格式：开始-结束，例如 23:30-07:30。支持跨零点，会在该时段跳过推送。注意：只影响推送，设备对话和记录照常。留空 = 全天可推。"
   },
   "astrbot_session_id": {
-    "description": "设备会话标识",
+    "description": "设备会话的固定后缀",
     "type": "string",
     "default": "xiaozhi-wx",
-    "hint": "设备侧会话固定后缀。"
+    "hint": "管什么：设备侧会话 ID 的后缀，用来跟你的微信会话区分开。默认 xiaozhi-wx。什么时候改：想给设备单独一个干净记忆、又不想动别的配置时才改。"
   },
   "multi_device_enable": {
-    "description": "多设备独立记忆",
+    "description": "多台设备分开记记忆",
     "type": "bool",
     "default": false,
-    "hint": "按设备 id 区分会话。"
+    "hint": "开：每台设备按 id 单独存一份记忆，互不串味。关（默认）：所有设备共用一套。只有一台设备就别开。"
   },
   "context_seed_enable": {
-    "description": "回答前同步上下文",
+    "description": "回答前先同步上下文",
     "type": "bool",
     "default": true,
-    "hint": "把目标会话最近内容合并进设备会话。"
+    "hint": "开（默认）：每次回答前把微信会话最近几条内容合并进设备会话，设备能接上前文。关：设备完全独立记，不受微信影响。"
   },
   "context_seed_messages": {
-    "description": "每次同步多少条",
+    "description": "每次同步拉多少条",
     "type": "int",
     "default": 60,
-    "hint": "取目标会话最近这么多条。"
+    "hint": "管什么：从微信会话里取最近这么多条合并过去。默认 60。嫌记忆太杂就调小（20~30），想更连贯就调大。"
   },
   "context_max_messages": {
-    "description": "设备会话上限",
+    "description": "设备会话最多存多少条",
     "type": "int",
     "default": 200,
-    "hint": "超过就丢最早的。"
+    "hint": "管什么：合并后超过这个数就丢最早的，防止无限膨胀。默认 200。调太小会忘事，调太大吃内存，200~400 比较合适。"
   },
   "long_task_notice": {
-    "description": "长任务先回占位",
+    "description": "回答慢时先回一句占位",
     "type": "bool",
     "default": true,
-    "hint": "避免设备判定卡顿。"
+    "hint": "开（默认）：超过下面的秒数还没答完，先回「稍等我一下」，避免设备判定卡顿。关：一直等到答完，但设备大概率会先说「我这边卡了一下」。"
   },
   "long_task_threshold_sec": {
-    "description": "占位触发秒数",
+    "description": "几秒还没答完就先回占位句",
     "type": "int",
     "default": 5,
-    "hint": "建议 4~6。"
+    "hint": "怎么填：填 3~5 最稳。小智端大概 6~8 秒没收到回复就会自己说「卡了一下」，所以要在它超时前抢答一句。填 0 或关掉上面的开关 = 不等，直接返回完整结果。"
   },
   "long_task_remind_sec": {
-    "description": "进度提醒间隔（秒）",
+    "description": "长任务每隔多久报一次进度（秒）",
     "type": "int",
     "default": 45,
-    "hint": "长任务期间每隔多久推一句。"
+    "hint": "管什么：占位之后，任务还没完成时，每隔这么久推一句「还在弄」。默认 45。填太小吃消息，填太大你会以为它死了。"
   },
   "boot_greeting_mode": {
-    "description": "开机问候处理",
+    "description": "设备开机那句问候怎么处理",
     "type": "string",
     "default": "skip",
-    "hint": "skip 静默；greet 主动打招呼。",
+    "hint": "skip（默认）：静默不答，设备说「你好」时不给回应。greet：让 AstrBot 主动说一两句很短的招呼。改完建议保留下面的开关为开，不然识别不到开机问候。",
     "options": [
       "skip",
       "greet"
     ]
   },
   "drop_boot_greeting": {
-    "description": "识别开机问候",
+    "description": "认不认设备开机的固定问候",
     "type": "bool",
     "default": true,
-    "hint": "识别到就按上面模式处理。"
+    "hint": "开（默认）：认出「你好」「在吗」这类短句就按上面的模式处理，不当成正常提问。关：所有话都当正常提问走对话，开机问候也会被认真回答一遍。"
   },
   "disable_session_tts": {
-    "description": "关闭设备会话 TTS",
+    "description": "关掉设备会话的语音合成",
     "type": "bool",
     "default": false,
-    "hint": "开启后只取文本不转语音。"
+    "hint": "开：设备会话只取文字不转语音。关（默认）：正常转。什么时候开：设备自己已经在念了、不想重复出声时。"
   },
   "ask_tool_name": {
-    "description": "提问工具名",
+    "description": "暴露给云端的提问工具名",
     "type": "string",
     "default": "ask_astrbot",
-    "hint": "改名后要在小智控制台重新同步。"
+    "hint": "默认 ask_astrbot，一般不用改。如果要改：改完必须去小智控制台重新同步一次工具列表，否则云端还在调旧名字。"
   },
   "persona_label": {
     "description": "人格标签",
     "type": "string",
     "default": "",
-    "hint": "推送和占位句里指代自己，留空用默认说法。"
+    "hint": "管什么：推送和占位句里指代自己时的叫法，留空用默认说法。填「彭语涵」这类名字会更有代入感。"
   },
   "music_enable": {
-    "description": "点歌功能",
+    "description": "点歌功能总开关",
     "type": "bool",
     "default": true,
-    "hint": "支持「点歌/放首歌」。"
+    "hint": "开（默认）：支持「点歌」「放首歌」「我想听」这类说法。关：这些句子当普通聊天处理。前提：本机要装了 astrbot_plugin_music，没装时插件只回一句提示，不会报错。"
   },
   "music_send_file": {
-    "description": "点歌时发音频文件",
+    "description": "点歌时直接把音频发出来",
     "type": "bool",
     "default": true,
-    "hint": "关闭则只回歌名和链接。"
+    "hint": "开（默认）：找到后把音频文件发到目标会话，设备能直接播。关：只回歌名和链接，省流量。"
   },
   "music_reply_with_url": {
-    "description": "回复里带直链",
+    "description": "回复里带播放直链",
     "type": "bool",
     "default": true,
-    "hint": "关闭则只给歌名。"
+    "hint": "开（默认）：回复里附一条 http 链接。关：只给歌名，适合设备不支持网页播放时。"
   },
   "music_cache_ttl": {
-    "description": "音频缓存有效期（秒）",
+    "description": "同一首歌多久内不重复下载（秒）",
     "type": "int",
     "default": 900,
-    "hint": "这段时间内重复点不重新下载。"
+    "hint": "管什么：缓存有效期。默认 900 秒（15 分钟）。这段时间内再点同一首直接用本地文件。想省空间就调小，想更快就调大。"
   },
   "music_cleanup_enable": {
     "description": "自动清理点歌缓存",
     "type": "bool",
     "default": true,
-    "hint": "定期删过期音频。"
+    "hint": "开（默认）：按下面的间隔定期删过期音频，避免占满磁盘。关：全靠手动。"
   },
   "music_cleanup_hours": {
-    "description": "清理间隔（小时）",
+    "description": "每隔几小时清理一次",
     "type": "int",
     "default": 6,
-    "hint": "多久跑一次。"
+    "hint": "默认 6 小时。改动不频繁的话填 12~24 也行。"
   },
   "music_keep_days": {
-    "description": "缓存保留天数",
+    "description": "音频最多留几天",
     "type": "int",
     "default": 3,
-    "hint": "超过就删。"
+    "hint": "默认 3 天。超过这个天数的缓存文件会被删掉。"
   },
   "music_max_mb": {
-    "description": "缓存总容量上限（MB）",
+    "description": "缓存最多占多少 MB",
     "type": "int",
     "default": 200,
-    "hint": "超过从最旧的开始删。"
+    "hint": "默认 200 MB。总大小超过就从最旧的开始删。按一首歌 3~5 MB 估，200 MB 大概能放四五十首。"
+  },
+  "reply_max_chars": {
+    "description": "设备侧回复最多念多少字",
+    "type": "int",
+    "default": 150,
+    "hint": "管什么：设备是语音，太长念不完。超过就在句末截断。怎么填：默认 150。想听长一点填 300，只想短答填 80。微信侧不受这个限制，只影响设备。"
+  },
+  "kb_enable": {
+    "description": "支持「记住某事」写进知识库",
+    "type": "bool",
+    "default": true,
+    "hint": "开：说到「记住…」「记一下…」这类话，会自动把内容写进知识库，以后微信和小智哪边问都能查到，不受 60 条历史窗口限制。关：只当普通聊天处理。前提是本机至少有一个知识库。"
+  },
+  "kb_remember_words": {
+    "description": "哪些话算「要我记住」",
+    "type": "list",
+    "default": [
+      "记住",
+      "记一下",
+      "帮我记",
+      "记着"
+    ],
+    "hint": "怎么填：句子里出现任意一个词，就把这句话的后半段写进知识库。觉得容易误触发就改长一点，比如「记住：」。"
+  },
+  "kb_name": {
+    "description": "写进哪个知识库（可留空）",
+    "type": "string",
+    "default": "",
+    "hint": "留空：自动用本机第一个知识库。填名字：写进指定那个（名字要和控制台里显示的一致）。找不到知识库时只记日志，不影响正常回答。"
   }
 }

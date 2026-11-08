@@ -105,4 +105,74 @@ $("cleanup").onclick = async () => {
   }
 };
 
+async function loadSettings() {
+  try {
+    const data = await bridge.apiGet("settings");
+    const c = data.settings || {};
+    $("replyMax").value = c.reply_max_chars ?? 150;
+    $("ltSec").value = c.long_task_threshold_sec ?? 5;
+    $("ltRemind").value = c.long_task_remind_sec ?? 45;
+    $("seedN").value = c.context_seed_messages ?? 60;
+    $("seedMax").value = c.context_max_messages ?? 200;
+    $("kbEnable").checked = !!c.kb_enable;
+  } catch (err) {
+    pill("red", "读设置失败：" + ((err && err.message) || err));
+  }
+}
+
+$("saveSettings").onclick = async () => {
+  const patch = {
+    reply_max_chars: Number($("replyMax").value),
+    long_task_threshold_sec: Number($("ltSec").value),
+    long_task_remind_sec: Number($("ltRemind").value),
+    context_seed_messages: Number($("seedN").value),
+    context_max_messages: Number($("seedMax").value),
+    kb_enable: $("kbEnable").checked,
+  };
+  try {
+    await bridge.apiPost("settings/save", patch);
+    await load();
+    await loadSettings();
+    pill("green", "设置已保存");
+  } catch (err) {
+    pill("red", "保存失败：" + ((err && err.message) || err));
+  }
+};
+
+$("exportCfg").onclick = async () => {
+  try {
+    const data = await bridge.apiGet("export");
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "xiaozhi-bridge-config.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) {
+    alert("导出失败：" + ((err && err.message) || err));
+  }
+};
+
+$("importCfg").onclick = () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json";
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await bridge.apiPost("import", payload);
+      alert("已导入 " + (res.keys || 0) + " 项设置，建议重载插件");
+      await load();
+      await loadSettings();
+    } catch (err) {
+      alert("导入失败：" + ((err && err.message) || err));
+    }
+  };
+  input.click();
+};
+
 load();
+loadSettings();

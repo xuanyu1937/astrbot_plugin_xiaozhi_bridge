@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from astrbot.api import logger
 
@@ -19,13 +20,32 @@ def history_of(conv) -> list[dict]:
     return raw if isinstance(raw, list) else []
 
 
+_NOISE = re.compile(r"<system_reminder>.*?</system_reminder>|【设备】|【我】", re.S)
+
+
 def text_of(message) -> str:
+    """取纯文本，顺手去掉系统提醒和推送标记，方便去重。"""
     parts = (message or {}).get("content")
     if isinstance(parts, str):
-        return parts.strip()
-    if isinstance(parts, list):
-        return "".join(str(p.get("text") or "") for p in parts if isinstance(p, dict)).strip()
-    return ""
+        raw = parts
+    elif isinstance(parts, list):
+        raw = "".join(str(p.get("text") or "") for p in parts if isinstance(p, dict))
+    else:
+        return ""
+    cleaned = _NOISE.sub("", raw)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _is_push_echo(message) -> bool:
+    """判断是不是插件推送回显：设备问答推到微信后又作为用户消息读回来。"""
+    parts = (message or {}).get("content")
+    if isinstance(parts, str):
+        raw = parts
+    elif isinstance(parts, list):
+        raw = "".join(str(p.get("text") or "") for p in parts if isinstance(p, dict))
+    else:
+        return False
+    return "【设备】" in raw and "【我】" in raw
 
 
 def compact(messages, limit):
@@ -35,10 +55,12 @@ def compact(messages, limit):
     for msg in messages[-limit:]:
         if not isinstance(msg, dict) or msg.get("role") not in ("user", "assistant"):
             continue
+        if _is_push_echo(msg):
+            continue
         text = text_of(msg)
         if not text:
             continue
-        key = (msg["role"], text)
+        key = text
         if key in seen:
             continue
         seen.add(key)
@@ -96,8 +118,14 @@ class SessionSync:
             return
 
         take = self.cfg.int("context_seed_messages", 1, 500)
-        incoming = compact(history_of(src), take)
+        full = history_of(src)
+        cursor = int(self.state.get("seed_cursor") or 0)
+        if cursor > len(full):          # 会话被清过，游标归零重来
+            cursor = 0
+        fresh = full[cursor:]
+        incoming = compact(fresh[-take:], take)
         if not incoming:
+            self.state.set("seed_cursor", len(full))
             return
 
         dst_cid = await self._cid(device_umo, create=True)
@@ -115,7 +143,7 @@ class SessionSync:
         merged = compact(existing + incoming, keep)
         try:
             await self.mgr.update_conversation(device_umo, dst_cid, history=merged)
-            self.state.set("seed_stamp", stamp)
+            self.state.update(seed_stamp=stamp, seed_cursor=len(full))
             logger.info("[xiaozhi_bridge] 上下文合并 %d 条，共 %d 条", len(incoming), len(merged))
         except Exception as exc:  # noqa: BLE001
             logger.warning("[xiaozhi_bridge] 写合并上下文失败：%s", exc)
@@ -143,8 +171,11 @@ class SessionSync:
             try:
                 # 优先用官方成对写入接口
                 await self.mgr.add_message_pair(cid, user_msg, bot_msg)
-            except Exception:  # noqa: BLE001
-                history = history + [user_msg, bot_msg]
-                await self.mgr.update_conversation(target, cid, history=history[-400:])
+            except Exception as exc:  # noqa: BLE001
+                # 回退时只在原历史上追加，绝不截断既有记录
+                logger.warning("[xiaozhi_bridge] 成对写入失败，改整段追加：%s", exc)
+                await self.mgr.update_conversation(
+                    target, cid, history=history + [user_msg, bot_msg]
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("[xiaozhi_bridge] 补写记录失败：%s", exc)
