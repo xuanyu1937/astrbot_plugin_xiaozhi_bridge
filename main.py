@@ -65,7 +65,7 @@ DATA_PREFIX = f"/{PLUGIN_NAME}/"
     PLUGIN_NAME,
     "轩宇(xuanyu)",
     "把小智（xiaozhi.me / ESP32）接入 AstrBot，设备说话由 AstrBot 的人格回答",
-    "2.1.0",
+    "2.1.1",
 )
 class XiaozhiBridge(Star):
     """桥接主体：管理 MCP 连接、对话编排、推送与视图接口。"""
@@ -84,20 +84,25 @@ class XiaozhiBridge(Star):
         self.last_error = ""
         self.count_today = 0
         self._cleanup_task = None
+        self._watch_task = None
         self._bg_tasks: set[asyncio.Task] = set()
 
     # ================= 生命周期 =================
     async def initialize(self) -> None:
-        self.state.update(push_enabled=self.cfg.bool("push_to_wechat"))
+        # 开关只在第一次写入默认值，之后以状态文件里的为准，
+        # 避免每次重载都把你手动关掉的推送又打开
+        if self.state.get("push_enabled") is None:
+            self.state.update(push_enabled=self.cfg.bool("push_to_wechat"))
         self._register_views()
         self._start_mcp()
+        self._watch_task = asyncio.create_task(self._watchdog_loop())
         if self.cfg.bool("music_cleanup_enable"):
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
         logger.info("[xiaozhi_bridge] 插件就绪，MCP 目标 %s", self._mask(self.cfg.token))
 
     async def terminate(self) -> None:
         """重载前必须收干净：取消后台任务、关连接，避免残留。"""
-        for task in [self._cleanup_task, *self._bg_tasks]:
+        for task in [self._cleanup_task, self._watch_task, *self._bg_tasks]:
             if task and not task.done():
                 task.cancel()
         if self.mcp:
@@ -263,16 +268,31 @@ class XiaozhiBridge(Star):
             answer = await self._ask(question, device_id)
             if record and answer:
                 await self.sync.record(question, answer)
+            await self._push_pair(question, answer)
             return answer
 
         task = asyncio.create_task(self._ask(question, device_id))
         try:
-            return await asyncio.wait_for(asyncio.shield(task), timeout=threshold)
+            answer = await asyncio.wait_for(asyncio.shield(task), timeout=threshold)
+            # 阈值内答完：这是最常见的路径，必须写记录并推送，否则微信收不到
+            if record and answer:
+                await self.sync.record(question, answer)
+            await self._push_pair(question, answer)
+            return answer
         except asyncio.TimeoutError:
             bg = asyncio.create_task(self._finish_later(task, question, record))
             self._bg_tasks.add(bg)
             bg.add_done_callback(self._bg_tasks.discard)
             return "稍等我一下"
+
+        # 快速回答也要补写记录 + 推送，否则设备对话不会进微信
+        if record and answer:
+            try:
+                await self.sync.record(question, answer)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[xiaozhi_bridge] 补写记录失败：%s", exc)
+        await self._push_pair(question, answer)
+        return answer
 
     def _session_for(self, device_id: str = "") -> str:
         base = self.cfg.device_session_id
@@ -318,13 +338,23 @@ class XiaozhiBridge(Star):
         await self._push_pair(question, text)
 
     async def _push_pair(self, question: str, answer: str) -> None:
-        """推送到目标会话：按配置决定是否带原话，静音时段跳过。"""
-        if not self.cfg.bool("push_to_wechat"):
+        """推送一轮问答。
+
+        唯一的开关是视图里那个「推送对话到微信」：
+        开着就每次都推，关着就一次都不推。静音时段是额外的过滤器。
+        """
+        if self.state.get("push_enabled", True) is False:
+            self.pusher.last_result = "推送开关已关闭"
+            logger.info("[xiaozhi_bridge] 推送开关关着，跳过")
             return
-        if self.state.get("push_enabled") is False:
+        if not self.cfg.push_umo:
+            self.pusher.last_result = "没有推送目标"
             return
         if self.cfg.in_quiet_hours():
+            self.pusher.last_result = "处于静音时段"
+            logger.info("[xiaozhi_bridge] 静音时段，跳过推送")
             return
+
         try:
             if self.cfg.bool("push_with_question"):
                 head = self.cfg.str("push_bot_tag", "【设备】") + question
@@ -332,8 +362,10 @@ class XiaozhiBridge(Star):
                 text = f"{head}\n{tail}"
             else:
                 text = answer
-            await self.pusher.send(text)
+            result = await self.pusher.send(text)
+            logger.info("[xiaozhi_bridge] 推送结果：%s", result)
         except Exception as exc:  # noqa: BLE001
+            self.pusher.last_result = f"异常：{exc}"[:120]
             logger.warning("[xiaozhi_bridge] 推送失败：%s", exc)
 
     # ================= 其余三个工具 =================
@@ -422,6 +454,9 @@ class XiaozhiBridge(Star):
 
     # ================= 状态与视图接口 =================
     def status_payload(self) -> dict:
+        # 配置可能比插件启动晚一步（面板先加载、后填 Token），这里补一次自动启动
+        if self.mcp is None and self.cfg.token:
+            self._start_mcp()
         connected = bool(self.mcp and self.mcp.online)
         mcp_err = self.mcp.last_error if self.mcp else ""
         diag = [
@@ -466,6 +501,16 @@ class XiaozhiBridge(Star):
             "uptime": int(time.time() - self.started_at),
             "last_error": self.last_error or mcp_err,
             "quiet_hours": self.cfg.str("quiet_hours"),
+            "push_last": {
+                "result": getattr(self.pusher, "last_result", ""),
+                "at": getattr(self.pusher, "last_at", 0.0),
+                "count": getattr(self.pusher, "count", 0),
+            },
+            "rpc_stats": (self.mcp.rpc_stats if self.mcp else {}),
+            "last_method": (self.mcp.last_method if self.mcp else ""),
+            "token_masked": self._mask(self.cfg.token),
+            "endpoint": self.mcp.url if self.mcp else "",
+            "connected_at": int(self.mcp.connected_at) if self.mcp else 0,
             "diag": diag,
         }
 
@@ -512,6 +557,19 @@ class XiaozhiBridge(Star):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[xiaozhi_bridge] 保存静音时段失败：%s", exc)
                 return error_response(f"保存失败：{exc}")
+
+        async def _testpush():
+            """发一条测试消息，用来确认推送链路通不通。"""
+            try:
+                # 临时放开节流，测试要能立刻看到
+                self.pusher._last_text = ""
+                self.pusher._last_at = 0.0
+                result = await self.pusher.send("小智桥接：这是一条测试推送")
+                ok = result == "已发送"
+                return json_response({"ok": ok, "result": result})
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[xiaozhi_bridge] 测试推送失败：%s", exc)
+                return error_response(f"测试推送失败：{exc}")
 
         async def _reconnect():
             try:
@@ -625,6 +683,7 @@ class XiaozhiBridge(Star):
             ("toggle", _toggle, ["POST"], "切换推送与召唤"),
             ("quiet", _quiet, ["POST"], "保存静音时段"),
             ("reconnect", _reconnect, ["POST"], "重新连接"),
+            ("testpush", _testpush, ["POST"], "测试推送"),
             ("cleanup", _cleanup, ["POST"], "清理点歌缓存"),
         ]
         for path, handler, methods, desc in routes:
@@ -632,6 +691,22 @@ class XiaozhiBridge(Star):
                 self.context.register_web_api(DATA_PREFIX + path, handler, methods, desc)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[xiaozhi_bridge] 注册接口 %s 失败：%s", path, exc)
+
+    async def _watchdog_loop(self) -> None:
+        """每 60 秒看一眼：配置里有 Token 但 MCP 没跑，就自动拉起。
+
+        解决「插件启动早于用户填 Token」的问题，也兜住意外退出。
+        """
+        while True:
+            try:
+                await asyncio.sleep(60)
+                if self.mcp is None and self.cfg.token:
+                    logger.info("[xiaozhi_bridge] 看门狗：MCP 未运行，自动拉起")
+                    self._start_mcp()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[xiaozhi_bridge] 看门狗异常：%s", exc)
 
     # ================= 缓存清理循环 =================
     async def _cleanup_loop(self) -> None:

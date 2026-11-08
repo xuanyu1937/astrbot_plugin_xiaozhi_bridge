@@ -26,6 +26,8 @@ class MCPClient:
         self._task = None
         self._stopping = False
         self._extra_tools: dict[str, dict] = {}
+        self.rpc_stats: dict[str, int] = {}
+        self.last_method = ""
 
     @staticmethod
     def _build_url(token: str) -> str:
@@ -100,7 +102,9 @@ class MCPClient:
         except json.JSONDecodeError:
             return
         msg_id = payload.get("id")
-        method = payload.get("method")
+        method = str(payload.get("method") or "")
+        self.rpc_stats[method] = self.rpc_stats.get(method, 0) + 1
+        self.last_method = method
         params = payload.get("params") or {}
         if msg_id is None:
             return  # 通知，不用回

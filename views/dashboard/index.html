@@ -11,23 +11,33 @@
     <header class="head">
       <h1>小智桥接</h1>
       <span id="pill" class="pill gray">读取中…</span>
+      <button id="refresh" class="mini">刷新</button>
     </header>
+
     <section class="card">
-      <h2>自检</h2>
+      <h2>连接</h2>
+      <dl id="conn" class="info"></dl>
       <ul id="checkList" class="check"></ul>
+      <div class="actions">
+        <button id="reconnect">重新连接</button>
+        <button id="testpush">发条测试推送</button>
+      </div>
     </section>
+
     <section class="card">
       <h2>开关</h2>
-      <label class="row"><span>推送对话</span><input type="checkbox" id="pushToggle" /></label>
-      <label class="row"><span>召唤词接管</span><input type="checkbox" id="triggerToggle" /></label>
+      <label class="row"><span>推送对话到微信</span><input type="checkbox" id="pushToggle" /></label>
+      <label class="row"><span>召唤词才接管</span><input type="checkbox" id="triggerToggle" /></label>
+      <label class="row"><span>推送时带上设备原话</span><input type="checkbox" id="withQuestion" /></label>
+      <label class="row"><span>把对话补写进会话记录</span><input type="checkbox" id="mirrorEnable" /></label>
+      <label class="row"><span>「记住…」写知识库</span><input type="checkbox" id="kbEnable" /></label>
       <label class="row"><span>静音时段</span>
         <input type="text" id="quiet" placeholder="23:30-07:30" /></label>
       <div class="actions">
         <button id="saveQuiet">保存静音时段</button>
-        <button id="reconnect">重新连接</button>
-        <button id="cleanup">清理缓存</button>
       </div>
     </section>
+
     <section class="card">
       <h2>常用设置</h2>
       <label class="row"><span>设备回复最多字数</span>
@@ -36,24 +46,22 @@
         <input type="number" id="ltSec" min="0" max="120" /></label>
       <label class="row"><span>进度提醒（秒）</span>
         <input type="number" id="ltRemind" min="10" max="600" /></label>
-      <label class="row"><span>上下文同步条数</span>
+      <label class="row"><span>每次同步条数</span>
         <input type="number" id="seedN" min="1" max="500" /></label>
       <label class="row"><span>设备会话上限</span>
         <input type="number" id="seedMax" min="50" max="2000" /></label>
-      <label class="row"><span>记住的话写知识库</span>
-        <input type="checkbox" id="kbEnable" /></label>
       <div class="actions">
-        <button id="saveSettings">保存设置</button>
+        <button id="saveSettings" class="primary">保存设置</button>
+        <button id="cleanup">清理缓存</button>
         <button id="exportCfg">导出</button>
         <button id="importCfg">导入</button>
       </div>
-      <p class="hint">Token、身份、推送目标仍在「插件配置」页改；换机器时用导出/导入搬走全套设置。</p>
+      <p class="hint">Token、身份、推送目标在「插件配置」页改；换机器时用导出/导入搬走全套设置（密钥不导出）。</p>
     </section>
 
     <section class="card">
       <h2>运行信息</h2>
       <dl id="info" class="info"></dl>
-      <p class="hint">Token、身份、推送目标请到「插件配置」页修改。</p>
     </section>
   </main>
   <script type="module" src="app.js"></script>

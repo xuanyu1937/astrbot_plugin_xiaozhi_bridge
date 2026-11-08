@@ -268,7 +268,8 @@ grep -rn "os.system\|subprocess\|eval(" *.py
 旧版插件名是 `astrbot_plugin_device_bridge`，**目录名与插件名不一致**，也不符合当前规范
 （自建日志文件、直连数据库写 `preferences` / `api_keys` 表）。2.0.0 的差异：
 
-| 项目 | 旧版 | 2.0.0 |
+| 项目 | 旧版 | 2.1.1 | 修复三处推送漏点；推送改由视图开关单点控制；状态页新增 RPC 与推送诊断 |
+| 2.1.0 |
 |---|---|---|
 | 插件名 | `astrbot_plugin_device_bridge` | `astrbot_plugin_xiaozhi_bridge` |
 | 本机端口 | 开 `8765` 提供接口 | **不开端口**，状态在视图里看 |

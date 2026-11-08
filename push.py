@@ -17,10 +17,14 @@ class Pusher:
         self.cfg = settings
         self._last_at = 0.0
         self._last_text = ""
+        self.last_result = ""
+        self.last_at = 0.0
+        self.count = 0
 
     async def send(self, text: str, umo: str = "") -> str:
         target = umo or self.cfg.push_umo
         if not target:
+            self.last_result = "没配置推送目标"
             return "（没配置推送目标）"
 
         content = str(text or "").strip()
@@ -41,12 +45,23 @@ class Pusher:
                 await asyncio.sleep(backoff)
             try:
                 chain = MessageChain([Plain(content)])
-                await self.ctx.send_message(target, chain)
+                found = await self.ctx.send_message(target, chain)
+                if found is not False:
+                    self.last_result = "已发送"
+                    self.last_at = time.time()
+                    self.count += 1
+                if found is False:
+                    # 返回 False 表示没找到对应平台适配器，不能当成功
+                    result = "平台未运行或会话不存在"
+                    logger.warning("[xiaozhi_bridge] 推送失败：%s", result)
+                    continue
                 self._last_at = time.time()
                 self._last_text = content
                 return "已发送"
             except Exception as exc:  # noqa: BLE001
                 result = f"异常：{exc}"
+                self.last_result = result
+                self.last_at = time.time()
                 logger.warning("[xiaozhi_bridge] 推送失败(第%d次)：%s", attempt, exc)
         return result
 

@@ -2,7 +2,7 @@ name: astrbot_plugin_xiaozhi_bridge
 display_name: 小智设备桥接
 desc: 把小智（xiaozhi.me / ESP32 语音助手）的 MCP 接入点接到 AstrBot，设备说话由 AstrBot 的人格回答，人设、记忆、知识库、工具全部复用。
 short_desc: 填一个小智 MCP Token，让设备用 AstrBot 的人格说话
-version: 2.1.0
+version: 2.1.1
 author: 轩宇（xuanyu）
 repo: https://github.com/xuanyu1937/astrbot_plugin_xiaozhi_bridge
 astrbot_version: ">=4.26.1"

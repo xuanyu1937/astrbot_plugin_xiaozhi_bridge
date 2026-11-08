@@ -33,11 +33,10 @@
     "_special": "sender_id"
   },
   "push_target_umo": {
-    "description": "推送到哪个会话（可留空）",
+    "description": "推送到哪个会话（留空自动）",
     "type": "string",
     "default": "",
-    "hint": "怎么填：留空最省事，插件会用「推送平台 + 发送人身份」自动拼一条，填不填都能在视图「推送目标」那一行看到实际结果。只有想推到别的会话（比如群）时才手填完整 umo。",
-    "_special": "umo"
+    "hint": "留空最省事：插件用「推送平台 + 发送人身份」自动拼，实际结果在视图「推送目标」那行看。要推到别的会话（比如群）才手填完整 umo，格式 platform:FriendMessage:xxx。"
   },
   "push_platform_id": {
     "description": "推送走哪个平台",
