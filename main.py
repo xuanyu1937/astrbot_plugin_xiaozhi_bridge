@@ -65,7 +65,7 @@ DATA_PREFIX = f"/{PLUGIN_NAME}/"
     PLUGIN_NAME,
     "轩宇(xuanyu)",
     "把小智（xiaozhi.me / ESP32）接入 AstrBot，设备说话由 AstrBot 的人格回答",
-    "2.1.1",
+    "2.1.2",
 )
 class XiaozhiBridge(Star):
     """桥接主体：管理 MCP 连接、对话编排、推送与视图接口。"""
@@ -96,6 +96,7 @@ class XiaozhiBridge(Star):
         self._register_views()
         self._start_mcp()
         self._watch_task = asyncio.create_task(self._watchdog_loop())
+        asyncio.create_task(self._import_notes())
         if self.cfg.bool("music_cleanup_enable"):
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
         logger.info("[xiaozhi_bridge] 插件就绪，MCP 目标 %s", self._mask(self.cfg.token))
@@ -121,6 +122,39 @@ class XiaozhiBridge(Star):
     @staticmethod
     def _mask(token: str) -> str:
         return f"…{token[-6:]}" if token and len(token) > 6 else "（空）"
+
+    async def _import_notes(self) -> None:
+        """把 plugin_data/notes/*.md 里的约定文档导入知识库，换机器也能带走。
+
+        用文件内容哈希做指纹，内容没变就不再重复写入。
+        """
+        try:
+            import hashlib
+            import os as _os
+
+            folder = _os.path.join(data_dir(), "notes")
+            if not _os.path.isdir(folder):
+                return
+            for name in sorted(_os.listdir(folder)):
+                if not name.endswith(".md"):
+                    continue
+                path = _os.path.join(folder, name)
+                try:
+                    body = open(path, encoding="utf-8").read()
+                except Exception:  # noqa: BLE001
+                    continue
+                digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+                key = f"notes_{name}"
+                if self.state.get(key) == digest:
+                    continue
+                saved = await kb_save(self.context, self.cfg, body.strip())
+                if saved:
+                    self.state.set(key, digest)
+                    logger.info("[xiaozhi_bridge] 约定文档已入知识库：%s", name)
+                else:
+                    logger.warning("[xiaozhi_bridge] 约定文档未能入知识库（可能没有知识库）：%s", name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[xiaozhi_bridge] 导入约定文档失败：%s", exc)
 
     # ================= MCP 工具定义 =================
     def _tool_specs(self) -> list[dict]:

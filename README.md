@@ -60,6 +60,7 @@ data/plugins/astrbot_plugin_xiaozhi_bridge/
 ├─ push.py               推送：节流、去重、退避重试
 ├─ music.py              点歌：意图识别、搜索打分、下载、缓存清理
 ├─ views/dashboard/      运行状态视图（index.html / app.js / style.css）
+├─ kb_memory.py          「记住…」与会话约定写入知识库
 ├─ .astrbot-plugin/i18n/ 视图标题的中英文案
 ├─ _conf_schema.json     配置定义（39 项）
 └─ metadata.yaml         插件元数据
@@ -92,7 +93,7 @@ pip install -r requirements.txt   # httpx、websockets
 
 这句话不写，云端可能自己编答案，不经过 AstrBot。
 
-## 四、配置项详解（39 项）
+## 四、配置项详解（43 项）
 
 ### 连接相关
 
@@ -240,7 +241,37 @@ plugin.mcp.unregister_tool(name)
 
 **插件安装目录里不会写任何数据**，旧版遗留的 `state.json` 首次启动会自动迁移一次。
 
-## 九、合规说明
+
+## 九、约定文档（notes）与知识库
+
+插件支持把「长期约定」写进知识库，换机器也不丢。
+
+### 用法
+
+```
+data/plugin_data/astrbot_plugin_xiaozhi_bridge/notes/
+└─ 工作方式.md        # 任意 .md 文件，可放多个
+```
+
+插件启动时会扫描这个目录：
+
+1. 逐个读 `.md` 文件
+2. 用内容 sha256 前 16 位做指纹，存在 `state.json` 的 `notes_<文件名>` 里
+3. 指纹没变就跳过，改过才重新导入
+4. 导入走官方知识库接口（`context.kb_manager`），不直连数据库
+
+### 为什么这么做
+
+- `notes/` 在 `plugin_data` 下，**跟着插件数据走**，换机器复制整个目录即可
+- 知识库是检索式的，写进去之后微信、小智、面板对话都能查到，不受聊天历史窗口限制
+- 内容指纹避免每次启动都重复灌一遍
+
+### 设备侧触发
+
+对小智说「记住：明天下午三点去医院」，同样会写进知识库（配置项
+`kb_enable` / `kb_remember_words` 控制）。当前如果没有知识库，只记日志，不影响正常回答。
+
+## 十、合规说明
 
 | 要求 | 本插件的做法 |
 |---|---|
@@ -263,12 +294,13 @@ grep -rn "sqlite3\|import logging\|print(\|aiohttp\|8765\|/AstrBot/data" *.py
 grep -rn "os.system\|subprocess\|eval(" *.py
 ```
 
-## 十、从旧版升级
+## 十一、从旧版升级
 
 旧版插件名是 `astrbot_plugin_device_bridge`，**目录名与插件名不一致**，也不符合当前规范
 （自建日志文件、直连数据库写 `preferences` / `api_keys` 表）。2.0.0 的差异：
 
-| 项目 | 旧版 | 2.1.1 | 修复三处推送漏点；推送改由视图开关单点控制；状态页新增 RPC 与推送诊断 |
+| 项目 | 旧版 | 2.1.2 | 新增 notes 约定文档机制：启动自动导入知识库，带内容指纹去重 |
+| 2.1.1 | 修复三处推送漏点；推送改由视图开关单点控制；状态页新增 RPC 与推送诊断 |
 | 2.1.0 |
 |---|---|---|
 | 插件名 | `astrbot_plugin_device_bridge` | `astrbot_plugin_xiaozhi_bridge` |
@@ -281,7 +313,7 @@ grep -rn "os.system\|subprocess\|eval(" *.py
 升级步骤：停用旧插件 → 删旧目录 → 装新版 → 重新填 Token 与 API Key → 重载。
 旧的 `state.json` 若还在，会自动迁移一次。
 
-## 十一、常见问题
+## 十二、常见问题
 
 **Q1：设备说「我这边卡了一下」**
 回复超过设备端超时（通常 6~8 秒）。把 `long_task_threshold_sec` 调到 4~5，
@@ -315,7 +347,7 @@ grep -rn "os.system\|subprocess\|eval(" *.py
 **Q9：想换工具名**
 改 `ask_tool_name` 后，必须到小智控制台重新同步一次工具列表，否则云端还在调旧名字。
 
-## 十二、排障速查
+## 十三、排障速查
 
 ```bash
 # 插件是否加载
@@ -339,7 +371,7 @@ curl -H "Authorization: Bearer <key>" \
 | `对话失败：...` | 本机 API 调不通或 Key 权限不足 |
 | `推送失败(第N次)：...` | 平台侧拒绝，通常是平台适配器没运行 |
 
-## 十三、开发与扩展
+## 十四、开发与扩展
 
 **加一个 MCP 工具**
 
@@ -366,13 +398,13 @@ def register_extra(plugin):
 - 返回空字符串表示「本轮不用回答」，云端会保持安静；
 - 抛异常会被兜住并转成 `isError=true`，不会断开 MCP 连接。
 
-## 十四、版本记录
+## 十五、版本记录
 
 | 版本 | 变更 |
 |---|---|
 | 2.0.0 | 按 AstrBot 官方插件规范整体重构：不开端口、不连数据库、不自建日志；改名并对齐仓库；新增视图、点歌、多设备记忆 |
 | 1.6.x | 早期版本，名为 `astrbot_plugin_device_bridge`，已废弃 |
 
-## 十五、许可
+## 十六、许可
 
 MIT，见 `LICENSE`。
